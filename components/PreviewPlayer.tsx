@@ -200,7 +200,7 @@ export default function PreviewPlayer({
         ))}
         <div
           className="overlay-canvas"
-          style={{ transform: `scale(${scale})` }}
+          style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
         >
           {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
           {imageLayers

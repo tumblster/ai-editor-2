@@ -3,7 +3,7 @@
 // Selector de estilo: vista previa a la izquierda, tarjetas a la derecha con el
 // mismo clip de ejemplo, botones Back y Next, y sorpresa (dado).
 
-import { StyleThumb, EXAMPLE_WORDS } from './CaptionRender'
+import { CaptionRender, StyleThumb, EXAMPLE_WORDS } from './CaptionRender'
 import { DESIGN_H, DESIGN_W, STYLE_PRESETS, STYLE_IDS } from '@/lib/styles/presets'
 import { markEmph } from '@/lib/cues'
 import type { Cue } from '@/lib/cues'
@@ -34,13 +34,11 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
   const currentIdx = styleId ? ids.indexOf(styleId) : -1
 
   const step = (dir: 1 | -1) => {
-    const next = (currentIdx + 1 + dir) % (ids.length + 1) - 1
     // ciclo: -1 (ninguno) → 0 → … → 4 → -1
     const raw = currentIdx + dir
     if (raw >= ids.length) onSelect(null)
     else if (raw < -1) onSelect(ids[ids.length - 1])
     else onSelect(raw === -1 ? null : ids[raw])
-    void next
   }
 
   const surprise = () => {
@@ -117,6 +115,5 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
 }
 
 function StylePreviewInner({ presetId }: { presetId: StylePresetId }) {
-  const { CaptionRender } = require('./CaptionRender') as typeof import('./CaptionRender')
   return <CaptionRender preset={STYLE_PRESETS[presetId]} cue={exampleCue(presetId)} />
 }
