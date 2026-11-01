@@ -1,0 +1,17 @@
+# dependencias
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# archivos de usuarias — videos, imágenes y estado del proyecto
+uploads/
+
+# secretos — nunca en el repo
+.env.local
+.env*.local
+
+.DS_Store
