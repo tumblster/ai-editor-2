@@ -46,8 +46,8 @@ export function probeVideo(filePath: string): Promise<ProbeResult> {
     )
     let stdout = ''
     proc.stdout.on('data', (d) => (stdout += d.toString()))
+    const fallback: ProbeResult = { width: 1080, height: 1920, duration: 0, hasAudio: true }
     proc.on('close', (code) => {
-      const fallback: ProbeResult = { width: 1080, height: 1920, duration: 0, hasAudio: true }
       if (code !== 0 || !stdout) {
         resolve(fallback)
         return
