@@ -127,7 +127,7 @@ export default function VideoUploader({ compact, busy, error, onConfirm }: Props
           {busy.phase === 'upload' ? (
             <>
               <div className="progress">
-                <div className="progress-fill" style={{ width: `${Math.round(busy.progress * 100)}%` }} />
+                <div className="progress-fill" style={{ transform: `scaleX(${Math.min(Math.max(busy.progress, 0), 1)})` }} />
               </div>
               <span className="busy-label">
                 {busy.done}/{busy.total}

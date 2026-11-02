@@ -491,7 +491,7 @@ function VideoAddButton({
     <>
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-ghost"
         disabled={!!busy}
         aria-busy={!!busy}
         aria-label="Añadir videos o imágenes"
