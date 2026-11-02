@@ -111,7 +111,7 @@ Estados de UI requeridos:
 | `TranscriptionView.tsx` | Frases de 3–5 palabras con tiempos; frases quitadas marcadas visualmente |
 | `AutocutPanel.tsx` | Checks de autorrecorte + botón **Autorrecorte**; el resultado se avisa con el toast **Autorrecorte listo** |
 | `Timeline.tsx` | Línea de tiempo fluida a 60 fps (`requestAnimationFrame`) con pistas de video, texto e imagen; segmentos clicables, ajuste de bordes arrastrando inicio/fin, cabezal arrastrable sin tirones |
-| `StylePicker.tsx` | Selector de estilos predefinidos; muestra preview del estilo sobre el video |
+| `StylePicker.tsx` | Selector de estilos con layout de tarjetas: barra de 5 segmentos arriba, tarjetas con fotograma y frase reales, check **Contorno**, **Back** y **Next** abajo (ver «Selector de estilos») |
 | `ExportButton.tsx` | Botón **Exportar** con estados cargando y error |
 
 ### 7. `lib/groq.ts`
@@ -169,7 +169,7 @@ Guardar, duplicar y editar un Look propio queda para Fase 2.
 
 **Los cinco estilos usan nombres públicos exactos — Chispa, Revista, Titular, Claro, Foco — y nunca nombres de creadores, ni en la UI, ni en los slugs de código, ni en marketing.**
 
-El selector muestra la vista previa a la izquierda y las tarjetas de estilo a la derecha, con el mismo clip de ejemplo en cada tarjeta, y botones Back y Next para recorrerlas.
+El selector usa un layout de tarjetas (ver «Selector de estilos» más abajo): la vista previa es el reproductor, y cada tarjeta repite el mismo fotograma real del clip con un estilo distinto. Los botones Back y Next las recorren.
 
 Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin texto.
 
@@ -208,7 +208,7 @@ Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin
 - **Contorno opcional por estilo, apagado por defecto.** Se activa con el check **Contorno** del selector de estilo.
 - Si sombra y contorno están activos a la vez, **la sombra prevalece**. Interpretación aplicada hoy, *pendiente de decisión del usuario*: donde hay sombra no se dibuja contorno, así que en Chispa, Revista y Titular el check no cambia el texto base.
 - Si una imagen de apoyo choca con el texto (en tiempo y espacio), la imagen va detrás y el texto encima con sombra.
-- **No se fuerza contorno por contraste.** El check de contraste mide el fotograma real del preview y avisa (⚠ en el selector de estilo) cuando un texto sin sombra ni contorno no se lee sobre ese fondo. Amarillo plano sin sombra sobre fondo claro siempre se marca.
+- **No se fuerza contorno por contraste.** El check de contraste mide el fotograma real del preview y avisa (ícono de aviso en el selector de estilo) cuando un texto sin sombra ni contorno no se lee sobre ese fondo. Amarillo plano sin sombra sobre fondo claro siempre se marca.
 - Preview y export aplican la misma regla (`resolveStyle` en `lib/styles/presets.ts`).
 
 ---
@@ -254,6 +254,35 @@ Los segmentos quitados se marcan visualmente en la línea de tiempo y en la tran
 - **Rotación de móvil corregida:** un video de móvil con rotación de 90° sale vertical, no horizontal.
 - El texto de los estilos está en px sobre el lado corto del lienzo y las posiciones en % del lienzo, iguales en preview y export.
 - El export re-codifica solo al final, una vez
+
+---
+
+## Layout responsive (decisión del usuario)
+
+- **Escritorio (1024 px o más):** preview a la izquierda, opciones a la derecha, línea de tiempo abajo.
+- **Móvil y tablet (menos de 1024 px; probado en 768 y 390):**
+  - player fijo arriba, a ancho completo, con un máximo del 45% de la altura de la pantalla; nunca a pantalla completa, y con el alto ajustado al aspecto del video;
+  - debajo, las opciones de edición y la transcripción, con scroll;
+  - al final, la línea de tiempo con el botón **Plegar** / **Desplegar**. El botón solo aparece por debajo de 1024 px; en escritorio la línea de tiempo siempre está visible.
+- Sin scroll horizontal en ningún ancho. Las etiquetas de la línea de tiempo solo se muestran si caben enteras, nunca recortadas.
+
+## Selector de estilos (decisión del usuario)
+
+Layout de tarjetas aplicado solo al selector de estilos:
+- **Preview:** es el reproductor real, a la izquierda en escritorio y arriba en móvil. No hay una mini-preview aparte.
+- **Pasos arriba:** barra de 5 segmentos, uno por estilo, que marca el estilo actual. Sin numeración ni texto.
+- **Tarjetas:** cada una repite el mismo fotograma real del clip, con una frase real de la transcripción y su estilo aplicado, y el aspecto del video. Llevan solo el nombre del estilo, sin descripción.
+- **Abajo:** el check **Contorno** y los botones **Back** y **Next**. Next pasa al estilo siguiente en el orden Chispa → Revista → Titular → Claro → Foco → sin estilo → Chispa; Back recorre el mismo ciclo al revés. Cada paso aplica el estilo igual que tocar su tarjeta, y tocar la tarjeta del estilo elegido lo quita.
+- No hay botón Surprise me.
+
+## Reglas de UI (aplicadas en `app/globals.css`)
+
+- Espaciado solo en 4, 8, 16, 24, 32, 48 y 64.
+- Una familia de UI (Inter con respaldos). Cuerpo de 16 px.
+- Botones de 52, 44 o 36 px de alto. Un CTA primario por pantalla (en el editor, **Exportar**).
+- Movimiento bajo 300 ms, ease-out, solo transform y opacity, nunca desde scale 0, con prefers-reduced-motion.
+- Sin gradientes, sin sombras en reposo, sin `transition: all`, sin textos cortados ni desvanecidos, sin eyebrow.
+- Copy: solo el copy cerrado de este plan, sin descripciones ni subtítulos nuevos.
 
 ---
 
@@ -354,6 +383,12 @@ Sin resumen con desglose. La palabra «retakes» no aparece en la UI.
 |-------|-------------|
 | Activar contorno del estilo | **Contorno** |
 
+### Línea de tiempo en móvil
+| Acción | Copy exacto |
+|--------|-------------|
+| Ocultar la línea de tiempo | **Plegar** |
+| Mostrar la línea de tiempo | **Desplegar** |
+
 ### Mensajes de error (cerrados)
 | Situación | Mensaje exacto al usuario |
 |-----------|--------------------------|
@@ -368,8 +403,8 @@ Sin resumen con desglose. La palabra «retakes» no aparece en la UI.
 |---------|-----------------|--------------|--------|
 | Zona de subida | Componente (drag-and-drop) + botón | 2 | ✅ |
 | Panel de autorrecorte | Título + 3 checks + botón (+ toast temporal) | 5 | ✅ |
-| Selector de estilos | Título + preview + 5 tarjetas de estilo + Back/Next + check Contorno | 9 | ✅ |
-| Línea de tiempo | Título + componente | 2 | ✅ |
+| Selector de estilos | Título + barra de pasos + 5 tarjetas de estilo + check Contorno + Back/Next (la preview es el reproductor) | 9 | ✅ |
+| Línea de tiempo | Título + componente (+ botón Plegar/Desplegar en móvil) | 3 | ✅ |
 | Transcripción | Título + segmentos con tiempos | 2 | ✅ |
 | Mensajes de error | Un solo mensaje por error | 1 | ✅ |
 
@@ -408,7 +443,7 @@ ai-editor-2/
 │   ├── AutocutPanel.tsx                # Checks + botón Autorrecorte (aviso: toast)
 │   ├── Timeline.tsx                    # Línea de tiempo con pistas video + texto + imagen
 │   ├── PreviewPlayer.tsx               # Reproductor con el aspecto del video, overlay de estilo e imágenes
-│   ├── StylePicker.tsx                 # Tarjetas de estilos predefinidos
+│   ├── StylePicker.tsx                 # Tarjetas de estilo sobre el fotograma real, Back/Next
 │   └── ExportButton.tsx                # Botón Exportar con estados
 ├── lib/
 │   ├── groq.ts                         # Cliente Groq (solo servidor)

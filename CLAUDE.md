@@ -102,6 +102,17 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
 - **Texto movible:** el bloque de texto de cada estilo se arrastra en la preview. La posición se guarda en %, se puede deshacer y rehacer, y el export la respeta. Si una imagen choca con el texto, la imagen va detrás y el texto encima con sombra.
 - **Retake:** solo dentro del mismo video en Fase 1, no entre videos consecutivos.
 - **Export:** watchdog de ffmpeg por falta de progreso. Si pasa 60 segundos sin progreso, se mata el proceso, se borra la carpeta del export y se devuelve «No se pudo exportar. Intenta de nuevo.». El tiempo máximo actual se mantiene como techo de seguridad. El preset de calidad no cambia por ahora.
+- **Layout responsive:**
+  - En escritorio (1024 px o más): preview a la izquierda, opciones a la derecha y línea de tiempo abajo.
+  - En móvil y tablet (menos de 1024 px; probado en 768 y 390): player fijo arriba a ancho completo, con un máximo del 45% de la altura y sin pantalla completa; debajo, las opciones con scroll; al final, la línea de tiempo con el botón **Plegar** / **Desplegar**, que solo aparece por debajo de 1024 px.
+  - Sin scroll horizontal y sin etiquetas recortadas.
+- **Reglas de UI** (aplicadas en `app/globals.css`):
+  - espaciado solo en 4, 8, 16, 24, 32, 48 y 64;
+  - una familia de UI y cuerpo de 16 px;
+  - botones de 52, 44 o 36 px y un CTA primario por pantalla;
+  - movimiento bajo 300 ms, ease-out, solo transform y opacity, con prefers-reduced-motion;
+  - sin gradientes, sin sombras en reposo, sin textos cortados ni desvanecidos, sin eyebrow.
+- **Selector de estilos:** la preview es el reproductor real. Arriba hay una barra de 5 segmentos que marca el estilo actual. Cada tarjeta muestra el fotograma real del clip con una frase real y el estilo aplicado, solo con el nombre. Abajo van el check **Contorno** y **Back** / **Next**, que recorren Chispa → Revista → Titular → Claro → Foco → sin estilo. Sin Surprise me, sin presets nuevos y sin selector de fuentes.
 
 ### Pendiente de decisión del usuario
 1. **Nombre del check:** hoy **Quitar repeticiones**, en vez de «Quitar retakes».
