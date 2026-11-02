@@ -34,10 +34,12 @@ Cubren:
 - los cues,
 - sombra, contorno y el aviso de contraste,
 - el archivo ASS,
+- el aspecto del video (incluido el video de móvil rotado),
+- el texto movible y la sombra cuando una imagen queda debajo,
 - el rechazo rápido de imágenes corruptas,
-- el tiempo máximo de ffmpeg.
+- el tiempo máximo y el watchdog de progreso de ffmpeg.
 
-Las dos últimas usan el `ffmpeg`/`ffprobe` del sistema.
+Las pruebas de video rotado, imagen corrupta, tiempo máximo y watchdog usan el `ffmpeg`/`ffprobe` del sistema.
 
 Sale con código 1 si alguna falla.
 
@@ -47,5 +49,6 @@ Cada export se arma en `uploads/export-<id>/` (en `.gitignore`):
 
 - La carpeta se borra cuando termina la descarga, o si el export falla.
 - Antes de correr ffmpeg, cada imagen de apoyo activa se comprueba con ffprobe: tiene que decodificarse. Una imagen corrupta hace fallar el export con el mensaje cerrado, en lugar de dejar a ffmpeg colgado.
-- ffmpeg tiene un tiempo máximo de 2 min + 8 s por segundo exportado. Si lo supera, se mata, se borra la carpeta y el export falla con el mensaje cerrado.
+- Watchdog: si ffmpeg pasa 60 s sin progreso, se mata, se borra la carpeta y el export falla con el mensaje cerrado.
+- Techo de seguridad: un tiempo máximo de 2 min + 8 s por segundo exportado, con el mismo manejo.
 - Al empezar cada export, también se borran las carpetas `export-*` con más de 1 hora. Así se limpian las que quedaron por un corte del servidor.

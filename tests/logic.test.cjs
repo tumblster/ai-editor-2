@@ -21,7 +21,7 @@ const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
 const { STYLE_PRESETS, resolveStyle } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
-const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
+const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, FfmpegStallError, EXPORT_STALL_MS, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
 const { textRect, cueHitsImage, clampOffset } = require(`${B}/textLayout.js`)
 
@@ -289,6 +289,29 @@ test('tiempo máximo: runFfmpeg mata ffmpeg y rechaza con FfmpegTimeoutError', a
   const ms = Date.now() - t0
   assert(err instanceof FfmpegTimeoutError, `debía ser FfmpegTimeoutError: ${err}`)
   assert(ms < 6000, `tardó ${ms} ms en detenerse`)
+})
+
+test('watchdog: ffmpeg sin progreso se mata antes del techo y avanzando no se corta', async () => {
+  assert.strictEqual(EXPORT_STALL_MS, 60_000)
+  // espera fotogramas por stdin que nunca llegan: no hay progreso
+  let t0 = Date.now()
+  const err = await runFfmpeg(
+    ['-v', 'error', '-f', 'rawvideo', '-pix_fmt', 'gray', '-s', '16x16', '-i', 'pipe:0', '-f', 'null', '-'],
+    undefined,
+    { timeoutMs: 20_000, stallMs: 1500 }
+  )
+    .then(() => null)
+    .catch((e) => e)
+  assert(err instanceof FfmpegStallError, `debía ser FfmpegStallError: ${err}`)
+  assert(Date.now() - t0 < 6000, `tardó ${Date.now() - t0} ms`)
+  // un trabajo que avanza y dura más que la ventana del watchdog no se corta
+  t0 = Date.now()
+  await runFfmpeg(
+    ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=r=10:d=3,realtime', '-f', 'null', '-'],
+    undefined,
+    { timeoutMs: 20_000, stallMs: 1500 }
+  )
+  assert(Date.now() - t0 >= 2500, 'debía correr ~3 s sin cortarse')
 })
 
 ;(async () => {

@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 import { buildAss } from '@/lib/assBuilder'
 import { buildCues } from '@/lib/cues'
 import { COPY } from '@/lib/copy'
-import { exportTimeoutMs, probeImage, probeVideo, runFfmpeg } from '@/lib/ffmpeg'
+import { EXPORT_STALL_MS, exportTimeoutMs, probeImage, probeVideo, runFfmpeg } from '@/lib/ffmpeg'
 import { clientIp, rateLimit } from '@/lib/rateLimit'
 import {
   IMAGE_RE,
@@ -223,7 +223,8 @@ export async function POST(req: Request) {
       'out.mp4'
     )
 
-    await runFfmpeg(args, exportDir, exportTimeoutMs(totalTl))
+    // watchdog: 60 s sin progreso corta el export; el tiempo máximo queda como techo
+    await runFfmpeg(args, exportDir, { timeoutMs: exportTimeoutMs(totalTl), stallMs: EXPORT_STALL_MS })
 
     // La usuaria cerró o canceló mientras ffmpeg trabajaba: nadie leerá el archivo.
     if (req.signal.aborted) {

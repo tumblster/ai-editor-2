@@ -172,36 +172,102 @@ export class FfmpegTimeoutError extends Error {
   }
 }
 
+export class FfmpegStallError extends Error {
+  constructor(ms: number) {
+    super(`ffmpeg no mostró progreso en ${Math.round(ms / 1000)} s`)
+    this.name = 'FfmpegStallError'
+  }
+}
+
+/** Sin progreso de ffmpeg durante este tiempo, el export se corta. */
+export const EXPORT_STALL_MS = 60_000
+
+export interface RunFfmpegOptions {
+  /** Techo de seguridad: tiempo máximo total. */
+  timeoutMs?: number
+  /**
+   * Watchdog: si ffmpeg no muestra progreso (tiempo de salida, fotogramas o
+   * tamaño escrito) durante este tiempo, se mata. Usa `-progress pipe:1`.
+   */
+  stallMs?: number
+}
+
 /**
  * Corre ffmpeg con un log de servidor; rechaza con el stderr final si falla.
- * Con `timeoutMs`, si ffmpeg no termina a tiempo se mata (SIGTERM y, si no
- * responde, SIGKILL) y se rechaza con FfmpegTimeoutError cuando el proceso ya
- * salió — así la carpeta de trabajo se puede borrar sin archivos abiertos.
+ * Si supera `timeoutMs` o pasa `stallMs` sin progreso, se mata (SIGTERM y, si
+ * no responde, SIGKILL) y se rechaza cuando el proceso ya salió — así la
+ * carpeta de trabajo se puede borrar sin archivos abiertos.
  */
-export function runFfmpeg(args: string[], cwd?: string, timeoutMs?: number): Promise<void> {
+export function runFfmpeg(
+  args: string[],
+  cwd?: string,
+  opts: number | RunFfmpegOptions = {}
+): Promise<void> {
+  const { timeoutMs, stallMs } = typeof opts === 'number' ? { timeoutMs: opts, stallMs: undefined } : opts
+  const fullArgs = stallMs && stallMs > 0 ? ['-progress', 'pipe:1', '-nostats', ...args] : args
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { env: getSpawnEnv(), cwd })
+    const proc = spawn('ffmpeg', fullArgs, { env: getSpawnEnv(), cwd })
     let stderr = ''
-    let timedOut = false
+    let killedFor: Error | null = null
     let hardKill: ReturnType<typeof setTimeout> | undefined
-    const timer =
-      timeoutMs && timeoutMs > 0
-        ? setTimeout(() => {
-            timedOut = true
-            proc.kill('SIGTERM')
-            hardKill = setTimeout(() => proc.kill('SIGKILL'), 3_000)
-          }, timeoutMs)
+
+    const stop = (reason: Error) => {
+      if (killedFor) return
+      killedFor = reason
+      proc.kill('SIGTERM')
+      hardKill = setTimeout(() => proc.kill('SIGKILL'), 3_000)
+    }
+
+    const timer = timeoutMs && timeoutMs > 0 ? setTimeout(() => stop(new FfmpegTimeoutError(timeoutMs)), timeoutMs) : undefined
+
+    // ---- watchdog de progreso ----
+    let lastProgressAt = Date.now()
+    let lastMark = ''
+    let finishing = false // progress=end: ffmpeg cierra el archivo (faststart), ya no reporta
+    let block: Record<string, string> = {}
+    let pending = ''
+    const watchdog =
+      stallMs && stallMs > 0
+        ? setInterval(() => {
+            if (!finishing && Date.now() - lastProgressAt > stallMs) stop(new FfmpegStallError(stallMs))
+          }, Math.min(1_000, stallMs / 2))
         : undefined
+    proc.stdout.on('data', (d) => {
+      if (!watchdog) return
+      pending += d.toString()
+      const lines = pending.split('\n')
+      pending = lines.pop() ?? ''
+      for (const line of lines) {
+        const eq = line.indexOf('=')
+        if (eq < 0) continue
+        const key = line.slice(0, eq).trim()
+        const value = line.slice(eq + 1).trim()
+        block[key] = value
+        if (key !== 'progress') continue
+        const mark = `${block.out_time_us ?? ''}|${block.frame ?? ''}|${block.total_size ?? ''}`
+        if (mark !== lastMark) {
+          lastMark = mark
+          lastProgressAt = Date.now()
+        }
+        if (value === 'end') finishing = true
+        block = {}
+      }
+    })
+
     proc.stderr.on('data', (d) => {
       stderr += d.toString()
       if (stderr.length > 64_000) stderr = stderr.slice(-16_000)
     })
-    proc.on('close', (code) => {
+    const cleanup = () => {
       if (timer) clearTimeout(timer)
       if (hardKill) clearTimeout(hardKill)
-      if (timedOut) {
-        console.error('[ffmpeg] tiempo máximo superado, proceso detenido')
-        reject(new FfmpegTimeoutError(timeoutMs ?? 0))
+      if (watchdog) clearInterval(watchdog)
+    }
+    proc.on('close', (code) => {
+      cleanup()
+      if (killedFor) {
+        console.error(`[ffmpeg] detenido: ${killedFor.message}`)
+        reject(killedFor)
       } else if (code === 0) resolve()
       else {
         console.error('[ffmpeg] exit', code, 'última línea:', stderr.split('\n').slice(-6).join(' | '))
@@ -209,8 +275,7 @@ export function runFfmpeg(args: string[], cwd?: string, timeoutMs?: number): Pro
       }
     })
     proc.on('error', (err) => {
-      if (timer) clearTimeout(timer)
-      if (hardKill) clearTimeout(hardKill)
+      cleanup()
       console.error('[ffmpeg] spawn error', err)
       reject(err)
     })
