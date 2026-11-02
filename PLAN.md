@@ -203,12 +203,28 @@ Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin
 - Número o dato destacado en amarillo, siempre con sombra (palabra de énfasis)
 - Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra
 
+### Palabra resaltada sola en su línea (Playbook regla 2)
+- Una palabra resaltada (otro color, tamaño, mayúsculas, cursiva u otra fuente; por ejemplo **APRENDER**) va **sola en su línea**. Nunca comparte línea con palabras de otro estilo.
+- El corte se decide por estilo, no por cantidad de palabras: la línea de la resaltada no se rellena con la palabra siguiente aunque sobre espacio, y el resto de la frase se acomoda arriba o abajo, con un solo estilo por línea.
+- Se aplica en el agrupado de frases (`cueLines` en `lib/cues.ts`), en el layout de la preview (una línea por bloque) y en el ASS (`\N`), en los 5 estilos.
+
+### Margen al borde y duración (manual VM pp. 14-15)
+- **Nunca pegado al borde:** al publicar, las plataformas recortan un poco los lados. El bloque de texto queda siempre dentro de un **margen seguro del 6% por lado**, en su posición por defecto y al arrastrarlo (`safeOffset` en `lib/textLayout.ts`). Lo respetan la preview, el export y el check de contraste.
+- **Ningún subtítulo dura más que su clip:** cada subtítulo queda dentro de su segmento y del video. Si se pasara, se recorta al final del clip; se ajusta el subtítulo al clip, no al revés.
+
 ### Fuentes y prueba de la ñ (Playbook, manual VM p. 13)
 - Fuentes de los 5 estilos, sin cambios: Trebuchet MS (Chispa, Foco), Georgia (Revista y énfasis de Titular) y Arial (Titular, Claro).
 - Fuentes base del manual VM, **solo anotadas, no reemplazan a las actuales**: Montserrat, Playfair Display y Classic, sin borde y con sombra negra.
 - **Prueba de la ñ y las tildes** (en `npm test`, con libass): ninguna fuente en uso, base ni énfasis, puede achicar ni sustituir ÁÉÍÓÚÜÑ, áéíóúüñ, ¿¡ ni los apóstrofes ' ’. La Ñ y la ñ deben medir como la N y la n, con la tilde visible. Si una fuente falla, no se usa.
 
 ### Sombra y contorno (decisión del usuario)
+- **La sombra es difusa, siempre** (Playbook regla 1): halo suave y parejo alrededor de la letra, nunca una copia dura y desplazada.
+  - Valores de partida del manual VM: negro, Opacity 55%, Blurriness 17%, Distance 5, Angle -45°.
+  - Traducción al lienzo (`DIFFUSE_SHADOW` en `lib/styles/presets.ts`):
+    - opacidad 55%;
+    - desenfoque del 17% del tamaño de la letra como radio CSS; en libass el mismo halo pide `\blur` = radio / 1.5 (medido: `\blur 4` ≈ 6 px CSS, `\blur 8` ≈ 12 px);
+    - 3 px a -45° (2 px por eje, abajo a la derecha), casi sin desplazamiento, porque la regla 1 pide que no se note corrida.
+  - En el ASS la sombra va en su propia capa con relleno casi transparente, para que `\blur` difumine solo la sombra. El orden por frase es: contorno (si el check está encendido) → sombra difusa → relleno nítido.
 - **Sombra activa por defecto** en títulos y textos grandes (Chispa, Revista, Titular) y en las palabras de énfasis de todos los estilos. **Apagada** en subtitulado simple (Claro, Foco).
 - **Contorno opcional por estilo, apagado por defecto.** Por defecto solo hay sombra y el contorno no se dibuja.
 - El check **Contorno** del selector se puede marcar en los 5 estilos, incluidos Chispa, Revista y Titular. En Claro y Foco, sin sombra por defecto, también enciende el contorno.
@@ -499,6 +515,33 @@ ai-editor-2/
 - [ ] El repo tiene un commit limpio con el trabajo de Fase 1
 
 ---
+
+---
+
+## Guía de estilo del Playbook (referencia, no programada en Fase 1)
+
+Viene del Playbook de estilo de edición (13 páginas, con lo rescatado del manual VM). Las reglas 1 y 2, el margen al borde, la duración y la prueba de la ñ ya están programadas (ver «Sombra y contorno», «Palabra resaltada» y «Fuentes»). Lo de esta sección queda **como guía para editar y revisar el reel terminado, sin código nuevo en esta pasada**:
+
+- **Excepción de fondo con una frase sola** (video de fondo, por ejemplo una playa, con una sola frase): el contraste lo crea una **capa negra al 20%** entre el video y el texto (Blend con Opacity 20%). La frase va **sin borde ni sombra**. **Nada de viñeta**: oscurece las esquinas, no la zona del texto.
+- **Encuadre calcado del referente:** se copian la altura de cámara, el cuerpo visible, la distancia al protagonista y a los bordes, y los huecos libres para el texto, desde la grabación. Para calcarlo, el referente se superpone con opacidad. Del referente se calca el encuadre, no sus errores de estilo (por ejemplo, una palabra resaltada en medio de la línea).
+- **Momento cero:** el primer fotograma ya da contexto de qué trata el video. No es un cuadro vacío ni una cara a mitad de gesto, y su texto sigue las mismas reglas.
+- **Corte por la boca:**
+  - el video empieza y termina con voz en el 99% de los casos, sin silencios antes de la primera palabra ni cola al final;
+  - el corte de entrada cae en el ligero cierre de boca al empezar a hablar, y el de salida en la boca estática al terminar;
+  - nunca se cortan palabras;
+  - la duración solo se ajusta cortando silencios; no se acelera ni se estira.
+- **Nivel de voz:**
+  - se sube hasta que la barra de audio muestre **puntos rojos leves**, sin llegar a todo rojo;
+  - **no se acelera el audio**;
+  - **los efectos y la música van bajo la voz**;
+  - si se regraba un fragmento, el micrófono va en la misma posición que en la toma original.
+- **Logos e imágenes:** en **alta calidad**, con **borde redondo** y sombra cuidada. Nada de logos pixelados ni wordmark recortado.
+- **Copy en pantalla:**
+  - **sin afirmaciones en segunda persona** («no tienes», «eres», «te falta», «has»);
+  - el **llamado a la acción escrito es «sígueme para más»**, igual que su versión en voz.
+- **Ritmo** (referencia del Playbook, sin cambios en Fase 1):
+  - cortes duros cada 2 a 4 segundos, con punch-in por corte, nunca zoom suave y largo;
+  - imágenes de apoyo de cerca de 40% × 21%, de 2 a 4 segundos, detrás del texto.
 
 ---
 

@@ -90,7 +90,14 @@ Estas decisiones están cerradas. El agente no las cuestiona, no sugiere alterna
 
 ### Regla de contraste (texto sobre video)
 Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ningún texto sin sombra, contorno o caja».
+- **La sombra es difusa, siempre** (Playbook regla 1): halo suave alrededor de la letra, nunca dura ni desplazada.
+  - Valores de partida del manual VM: negro, Opacity 55%, Blurriness 17%, Distance 5, Angle -45°.
+  - Traducidos al lienzo: opacidad 55%; desenfoque del 17% del tamaño de la letra como radio CSS, y ese valor entre 1.5 en libass; 3 px a -45°, es decir 2 px por eje.
+  - En el export la sombra va en su propia capa: contorno (si está encendido) → sombra difusa → relleno nítido.
 - **Sombra activa por defecto** en Chispa, Revista, Titular y en las palabras de énfasis. **Sin sombra por defecto** en Claro y Foco (subtitulado simple).
+- **La palabra resaltada va sola en su línea** (Playbook regla 2): por color, tamaño, mayúsculas, cursiva u otra fuente. Nunca comparte línea con palabras de otro estilo, y su línea no se rellena. Aplica en los 5 estilos (`cueLines`).
+- **Nunca pegado al borde:** margen seguro del 6% por lado, contra el recorte de las plataformas, también al mover el bloque.
+- **Ningún subtítulo dura más que su clip:** se ajusta el subtítulo al clip, no al revés.
 - **Contorno apagado por defecto** en los 5 estilos: por defecto solo hay sombra y el contorno no se dibuja.
 - El check **Contorno** se puede marcar en todos los estilos, incluidos Chispa, Revista y Titular (no está bloqueado). Encendido, se dibuja un **contorno fino detrás de la sombra** y la sombra sigue prevaleciendo visualmente.
 - En Claro y Foco, sin sombra por defecto, el check también enciende el contorno.
@@ -126,6 +133,25 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
   - movimiento bajo 300 ms, ease-out, solo transform y opacity, con prefers-reduced-motion;
   - sin gradientes, sin sombras en reposo, sin textos cortados ni desvanecidos, sin eyebrow.
 - **Selector de estilos:** la preview es el reproductor real. Arriba hay una barra de 5 segmentos que marca el estilo actual. Cada tarjeta muestra el fotograma real del clip con una frase real y el estilo aplicado, solo con el nombre. Abajo van el check **Contorno** y **Back** / **Next**, que recorren Chispa → Revista → Titular → Claro → Foco → sin estilo. Sin Surprise me, sin presets nuevos y sin selector de fuentes.
+
+### Guía de estilo del Playbook (referencia, no programada en Fase 1)
+Del Playbook de estilo de edición (13 páginas, con lo rescatado del manual VM). Sirve para editar y revisar el reel terminado; **no es código nuevo** y no se implementa sin instrucción del arquitecto:
+- **Video de fondo con una sola frase** (por ejemplo, una playa): el contraste no lo crea el texto. Va una capa negra al 20% sobre el video y la frase encima, sin borde ni sombra. Nada de viñeta.
+- **Encuadre del referente y momento cero:**
+  - se calca el encuadre del referente (altura de cámara, distancia a los bordes y huecos libres para el texto), no sus errores de estilo;
+  - el primer fotograma ya da contexto de qué trata el video.
+- **Corte por la boca:**
+  - el video empieza y termina con voz en el 99% de los casos, sin silencio al inicio ni al final;
+  - se corta en el ligero cierre de boca al empezar y en la boca estática al terminar, sin cortar palabras;
+  - la duración solo se ajusta cortando silencios.
+- **Sonido:**
+  - nivel de voz con puntos rojos leves en la barra de audio, sin llegar a todo rojo;
+  - no se acelera el audio;
+  - música y efectos siempre bajo la voz.
+- **Logos e imágenes:** en alta calidad, con borde redondo y sombra cuidada, sin wordmark recortado.
+- **Copy en pantalla:**
+  - sin afirmaciones en segunda persona («no tienes», «te falta»);
+  - el llamado a la acción escrito es **sígueme para más**.
 
 ### Decisiones resueltas por el usuario
 - **Nombre del antiguo check:** resuelto con el botón dividido y el interruptor **Repeticiones**.
