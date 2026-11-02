@@ -23,7 +23,7 @@ const { STYLE_PRESETS, resolveStyle, outlineLayers, DIFFUSE_SHADOW, shadowXY, sh
 const { buildAss } = require(`${B}/assBuilder.js`)
 const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, FfmpegStallError, EXPORT_STALL_MS, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
-const { textRect, cueHitsImage, clampOffset } = require(`${B}/textLayout.js`)
+const { textRect, cueHitsImage, clampOffset, safeOffset, SAFE_MARGIN } = require(`${B}/textLayout.js`)
 
 const tr1 = require(`${R}/testmedia/tr1.json`).transcription
 const tr2 = require(`${R}/testmedia/tr2.json`).transcription
@@ -263,13 +263,62 @@ test('palabra resaltada sola en su línea: cueLines, ASS (\\N) en los 5 estilos 
   assert(/APRENDER\{\\r\}\\Ntres trucos/.test(ex), ex.split('\n').find((l) => l.includes('APRENDER')))
 })
 
+// ---- Margen al borde y duración (manual VM pp. 14-15) ----
+test('margen al borde: ningún bloque de texto queda pegado al borde, ni movido al extremo', () => {
+  const canvases = [DEFAULT_CANVAS, { w: 1920, h: 1080 }]
+  const pulls = [{ x: 0, y: 0 }, { x: 50, y: 50 }, { x: -50, y: -50 }, { x: 50, y: -50 }, { x: -50, y: 50 }]
+  for (const canvas of canvases) {
+    for (const id of Object.keys(STYLE_PRESETS)) {
+      const p = resolveStyle(STYLE_PRESETS[id])
+      for (const pull of pulls) {
+        const o = safeOffset(p, pull, canvas)
+        for (const side of ['left', 'right']) {
+          const [x0, y0, x1, y1] = textRect(p, side, o, canvas)
+          const tag = `${id} ${canvas.w}x${canvas.h} ${JSON.stringify(pull)} ${side}`
+          assert(x0 >= SAFE_MARGIN.x - 1e-9 && x1 <= 100 - SAFE_MARGIN.x + 1e-9, `${tag}: horizontal ${x0}-${x1}`)
+          assert(y0 >= SAFE_MARGIN.y - 1e-9 && y1 <= 100 - SAFE_MARGIN.y + 1e-9, `${tag}: vertical ${y0}-${y1}`)
+        }
+      }
+      // posición por defecto intacta (ya está dentro del margen)
+      assert.deepStrictEqual(safeOffset(p, { x: 0, y: 0 }, canvas), { x: 0, y: 0 }, `${id}: el default no se mueve`)
+    }
+  }
+  // el ASS aplica el mismo margen: Claro arrastrado al fondo queda dentro
+  const ass = buildAss('claro', buildCues('claro', cut, segs), totalDuration(segs), undefined, { offset: { x: 0, y: 50 } })
+  const y = +ass.split('\n').find((l) => l.startsWith('Dialogue:')).match(/\\pos\(\d+,(\d+)\)/)[1]
+  assert(y / 1920 * 100 <= 100 - SAFE_MARGIN.y, `centro a ${y}px`)
+})
+
+test('duración: ningún subtítulo dura más que su clip ni que el video', () => {
+  const total = totalDuration(segs)
+  for (const id of Object.keys(STYLE_PRESETS)) {
+    const cues = buildCues(id, cut, segs)
+    for (const c of cues) {
+      const seg = segs.find((s) => c.start >= s.tlStart - 1e-9 && c.start < s.tlEnd)
+      assert(seg, `${id}: cue sin clip`)
+      assert(c.end <= seg.tlEnd + 1e-9, `${id}: ${c.id} termina en ${c.end}, su clip en ${seg.tlEnd}`)
+    }
+    const ends = buildAss(id, cues, total).split('\n').filter((l) => l.startsWith('Dialogue:') && !l.includes(',Band,'))
+      .map((l) => { const [h, m, sec] = l.split(',')[2].split(':'); return +h * 3600 + +m * 60 + +sec })
+    assert(ends.every((e) => e <= total + 1e-9), `${id}: subtítulo más largo que el video`)
+  }
+  // un cue que se pasa del video se recorta al final; uno que empieza después no sale
+  const long = buildAss('claro', [
+    { id: 'a', start: total - 0.5, end: total + 3, side: 'left', words: [{ text: 'fin', emph: false }] },
+    { id: 'b', start: total + 1, end: total + 2, side: 'left', words: [{ text: 'fuera', emph: false }] },
+  ], total).split('\n').filter((l) => l.startsWith('Dialogue:'))
+  assert(long.length > 0 && long.every((l) => l.includes('fin') && !l.includes('fuera')))
+  assert(long.every((l) => l.split(',')[2] === '0:00:09.40'), long[0])
+})
+
 // ---- Texto movible e imágenes ----
 test('texto movible: el ASS respeta el desplazamiento guardado en %', () => {
   const total = totalDuration(segs)
   const cues = buildCues('claro', cut, segs)
   const pos = (ass) => ass.split('\n').find((l) => l.startsWith('Dialogue:')).match(/\\pos\((\d+),(\d+)\)/).slice(1).map(Number)
   assert.deepStrictEqual(pos(buildAss('claro', cues, total)), [540, Math.round(0.595 * 1920)])
-  assert.deepStrictEqual(pos(buildAss('claro', cues, total, undefined, { offset: { x: 10, y: -20 } })), [Math.round(0.6 * 1080), Math.round(0.395 * 1920)])
+  // x pedido 10% → el margen seguro lo deja en 2% (el bloque de 84% no toca el borde)
+  assert.deepStrictEqual(pos(buildAss('claro', cues, total, undefined, { offset: { x: 10, y: -20 } })), [Math.round(0.52 * 1080), Math.round(0.395 * 1920)])
   const rev = buildAss('revista', buildCues('revista', cut, segs), total, undefined, { offset: { x: 5, y: 10 } })
   assert(rev.includes(`\\an4\\pos(${Math.round(0.13 * 1080)},${Math.round(0.6 * 1920)})`), 'Revista bloque izquierdo movido')
   assert.deepStrictEqual(clampOffset({ x: 99, y: -99 }), { x: 50, y: -50 })

@@ -23,7 +23,7 @@ import { STYLE_PRESETS, resolveStyle } from '@/lib/styles/presets'
 import { usePlayback } from '@/lib/usePlayback'
 import { buildCutSegments } from '@/lib/timeline'
 import { canvasFor } from '@/lib/canvas'
-import { NO_OFFSET, clampOffset, textRect, type TextOffset } from '@/lib/textLayout'
+import { NO_OFFSET, clampOffset, safeOffset, textRect, type TextOffset } from '@/lib/textLayout'
 import type { EditDoc } from '@/types/project'
 import type { ImageAsset, Layer, PhraseUnit, StylePresetId, VideoAsset } from '@/types/project'
 
@@ -73,12 +73,16 @@ export default function Page() {
     () => (edit.styleId ? resolveStyle(STYLE_PRESETS[edit.styleId], { outline: outlineOn }) : null),
     [edit.styleId, outlineOn]
   )
-  const textOffset = useMemo(
-    () => (edit.styleId ? clampOffset(edit.textOffsets?.[edit.styleId]) : NO_OFFSET),
-    [edit.styleId, edit.textOffsets]
-  )
   // aspecto del proyecto = el del primer video (el export usa la misma regla)
   const canvas = useMemo(() => canvasFor(videos[0]?.width, videos[0]?.height), [videos])
+  // posición del texto dentro del margen seguro (igual que preview y export)
+  const textOffset = useMemo(
+    () =>
+      edit.styleId && preset
+        ? safeOffset(preset, clampOffset(edit.textOffsets?.[edit.styleId]), canvas)
+        : NO_OFFSET,
+    [edit.styleId, edit.textOffsets, preset, canvas]
+  )
 
   // ---- restore de project.json al abrir ----
   useEffect(() => {

@@ -22,6 +22,30 @@ export function clampOffset(o: Partial<TextOffset> | null | undefined): TextOffs
 }
 
 /**
+ * Margen seguro (manual VM pp. 14-15): las plataformas recortan un poco los
+ * lados al publicar, así que ningún subtítulo queda pegado al borde. En % del
+ * lienzo, por lado.
+ */
+export const SAFE_MARGIN = { x: 6, y: 6 } as const
+
+/**
+ * Desplazamiento que deja el bloque de texto dentro del margen seguro: el que
+ * pidió la usuaria, corrido lo justo para no tocar el borde. Lo usan la
+ * preview, el export y el contraste.
+ */
+export function safeOffset(preset: StylePreset, offset: TextOffset, canvas: Canvas): TextOffset {
+  const o = clampOffset(offset)
+  const p = preset.placement
+  // límites horizontales del bloque (en Revista, los dos bloques se mueven juntos)
+  const [x0, x1] = p.kind === 'blocks' ? [p.left[0], p.right[1]] : [8, 92]
+  const x = Math.min(Math.max(o.x, SAFE_MARGIN.x - x0), 100 - SAFE_MARGIN.x - x1)
+  // límites verticales a partir del alto estimado del bloque
+  const r = textRect(preset, 'left', { x: 0, y: 0 }, canvas)
+  const y = Math.min(Math.max(o.y, SAFE_MARGIN.y - r[1]), 100 - SAFE_MARGIN.y - r[3])
+  return { x, y }
+}
+
+/**
  * Sombra que se aplica al texto cuando una imagen de apoyo queda debajo:
  * la imagen va detrás y el texto encima con sombra (la misma sombra difusa).
  */

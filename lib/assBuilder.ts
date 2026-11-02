@@ -4,7 +4,7 @@
 import type { Layer, StylePresetId } from '@/types/project'
 import { cueLines, type Cue } from './cues'
 import { DEFAULT_CANVAS, type Canvas } from './canvas'
-import { COLLISION_SHADOW, clampOffset, cueHitsImage, textRect, type TextOffset } from './textLayout'
+import { COLLISION_SHADOW, cueHitsImage, safeOffset, textRect, type TextOffset } from './textLayout'
 import {
   DIFFUSE_SHADOW,
   STYLE_PRESETS,
@@ -185,7 +185,8 @@ export function buildAss(
   const W = canvas.w
   const H = canvas.h
   const preset = resolveStyle(STYLE_PRESETS[styleId], options)
-  const offset = clampOffset(options.offset)
+  // margen seguro: el bloque nunca queda pegado al borde
+  const offset = safeOffset(preset, options.offset ?? { x: 0, y: 0 }, canvas)
   const imageLayers = options.imageLayers ?? []
   const header = [
     '[Script Info]',
@@ -233,8 +234,10 @@ export function buildAss(
   }
   /** Eventos de un cue en sus capas, a partir de la capa `layer0`. */
   const emitCue = (cue: Cue, n: string, pos: string, layer0: number) => {
+    // ningún subtítulo dura más que su clip: se ajusta al clip (y al video), no al revés
+    if (cue.start >= totalDuration) return
     const t0 = assTime(cue.start)
-    const t1 = assTime(cue.end)
+    const t1 = assTime(Math.min(cue.end, totalDuration))
     const fill = cueText(cue, fillBase, emph, 'fill')
     if (!fill) return
     if (under) events.push(`Dialogue: ${layer0},${t0},${t1},${n}U,,0,0,0,,${pos}${cueText(cue, under.base, under.emphasis, 'fill')}`)

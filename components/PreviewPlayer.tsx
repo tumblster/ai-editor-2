@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CaptionRender } from './CaptionRender'
 import { activeCue, type Cue } from '@/lib/cues'
 import type { Canvas } from '@/lib/canvas'
-import { clampOffset, cueHitsImage, textRect, type TextOffset } from '@/lib/textLayout'
+import { clampOffset, cueHitsImage, safeOffset, textRect, type TextOffset } from '@/lib/textLayout'
 import type { StylePreset } from '@/lib/styles/presets'
 import type { Playback } from '@/lib/usePlayback'
 import { formatTime } from '@/lib/timeline'
@@ -65,7 +65,7 @@ function CaptionLive({
     })
   }, [playback, cues])
 
-  const shown = live ?? offset
+  const shown = live ?? safeOffset(preset, offset, canvas)
   const collision = cue ? cueHitsImage(cue, textRect(preset, cue.side, shown, canvas), imageLayers) : false
 
   const onDragStart = (e: React.PointerEvent) => {
@@ -79,10 +79,11 @@ function CaptionLive({
     const move = (e: PointerEvent) => {
       const d = drag.current
       if (!d || e.pointerId !== d.id) return
-      const next = clampOffset({
+      // margen seguro también al arrastrar: el bloque no se pega al borde
+      const next = safeOffset(preset, clampOffset({
         x: d.x + ((e.clientX - d.px) / (canvas.w * scale)) * 100,
         y: d.y + ((e.clientY - d.py) / (canvas.h * scale)) * 100,
-      })
+      }), canvas)
       liveRef.current = next
       setLive(next)
     }
@@ -103,7 +104,7 @@ function CaptionLive({
       window.removeEventListener('pointerup', up)
       window.removeEventListener('pointercancel', up)
     }
-  }, [canvas.w, canvas.h, scale, onMove])
+  }, [canvas, scale, onMove, preset])
 
   return (
     <CaptionRender preset={preset} cue={cue} offset={shown} collision={collision} onDragStart={onDragStart} />
