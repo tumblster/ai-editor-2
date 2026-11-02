@@ -6,7 +6,7 @@
 import type { CSSProperties } from 'react'
 
 import type { Cue } from '@/lib/cues'
-import { assFontScale, type StylePreset, type TextStyle } from '@/lib/styles/presets'
+import { assFontScale, outlineLayers, type StylePreset, type TextStyle } from '@/lib/styles/presets'
 import { COLLISION_SHADOW, NO_OFFSET, type TextOffset } from '@/lib/textLayout'
 
 function rgba(hex: string, alpha: number): string {
@@ -47,45 +47,66 @@ interface CaptionProps {
 }
 
 export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = false, onDragStart }: CaptionProps) {
-  const { placement, emphasis } = preset
-  // la imagen va detrás y el texto encima con sombra (la sombra prevalece sobre el contorno)
-  const base =
-    collision && preset.base.shadowOffset <= 0
+  const { placement } = preset
+  // Contorno encendido: dos capas como en el ASS. Abajo el contorno fino, arriba
+  // el texto con sus sombras: el contorno queda detrás y la sombra prevalece.
+  const layers = outlineLayers(preset)
+  const over = layers ? layers.over : preset
+  const under = layers?.under ?? null
+  // la imagen va detrás y el texto encima con sombra
+  const overBase =
+    collision && over.base.shadowOffset <= 0
       ? {
-          ...preset.base,
+          ...over.base,
           outlineWidth: 0,
           shadowOffset: COLLISION_SHADOW.offset,
           shadowAlpha: COLLISION_SHADOW.alpha,
         }
-      : preset.base
+      : over.base
   const drag: CSSProperties = onDragStart
     ? { pointerEvents: 'auto', cursor: 'move', touchAction: 'none', userSelect: 'none' }
     : {}
 
-  const words = (cue?.words ?? []).map((w, i) => {
-    if (!w.emph || !emphasis) {
-      return <span key={i}>{w.text} </span>
-    }
-    const css: CSSProperties = { color: emphasis.color }
-    if (emphasis.scale !== 1) css.fontSize = base.size * emphasis.scale
-    if (emphasis.italic) css.fontStyle = 'italic'
-    if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
-    if (emphasis.uppercase) css.textTransform = 'uppercase'
-    // las palabras de énfasis llevan sombra; donde hay sombra no va contorno
-    if (emphasis.shadowOffset > 0) {
-      css.textShadow = `${emphasis.shadowOffset}px ${emphasis.shadowOffset}px 0 rgba(0,0,0,${emphasis.shadowAlpha})`
-      if (base.outlineWidth > 0) css.WebkitTextStroke = '0px transparent'
-    }
-    return (
-      <span key={i} style={css}>
-        {w.text}{' '}
-      </span>
-    )
-  })
+  const wordsFor = (p: StylePreset, base: TextStyle) =>
+    (cue?.words ?? []).map((w, i) => {
+      const emphasis = p.emphasis
+      if (!w.emph || !emphasis) {
+        return <span key={i}>{w.text} </span>
+      }
+      const css: CSSProperties = { color: emphasis.color }
+      if (emphasis.scale !== 1) css.fontSize = base.size * emphasis.scale
+      if (emphasis.italic) css.fontStyle = 'italic'
+      if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
+      if (emphasis.uppercase) css.textTransform = 'uppercase'
+      // las palabras de énfasis llevan sombra (en la capa de arriba)
+      if (emphasis.shadowOffset > 0) {
+        css.textShadow = `${emphasis.shadowOffset}px ${emphasis.shadowOffset}px 0 rgba(0,0,0,${emphasis.shadowAlpha})`
+        if (base.outlineWidth > 0) css.WebkitTextStroke = '0px transparent'
+      }
+      return (
+        <span key={i} style={css}>
+          {w.text}{' '}
+        </span>
+      )
+    })
+
+  // capa de arriba (interactiva) y, si hay contorno, la de abajo (decorativa)
+  const textLayers = (box: CSSProperties) => (
+    <>
+      {under && (
+        <div aria-hidden style={{ ...box, ...textStyleCss(under.base), pointerEvents: 'none' }}>
+          {wordsFor(under, under.base)}
+        </div>
+      )}
+      <div className="caption-text" style={{ ...box, ...textStyleCss(overBase), ...drag }} onPointerDown={onDragStart}>
+        {wordsFor(over, overBase)}
+      </div>
+    </>
+  )
 
   if (placement.kind === 'blocks') {
     const [bx0, bx1] = placement.band
-    const blockStyle = (side: 'left' | 'right'): CSSProperties => {
+    const blockBox = (side: 'left' | 'right'): CSSProperties => {
       const [x0, x1] = side === 'left' ? placement.left : placement.right
       return {
         position: 'absolute',
@@ -94,8 +115,6 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
         top: `${50 + offset.y}%`,
         transform: 'translateY(-50%)',
         textAlign: side === 'left' ? 'left' : 'right',
-        ...textStyleCss(base),
-        ...drag,
       }
     }
     return (
@@ -110,35 +129,21 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
             background: `rgba(255,255,255,${placement.bandAlpha})`,
           }}
         />
-        {cue && (
-          <div className="caption-text" style={blockStyle(cue.side)} onPointerDown={onDragStart}>
-            {words}
-          </div>
-        )}
+        {cue && textLayers(blockBox(cue.side))}
       </>
     )
   }
 
   if (!cue) return null
 
-  return (
-    <div
-      className="caption-text"
-      style={{
-        position: 'absolute',
-        left: `${8 + offset.x}%`,
-        width: '84%',
-        top: `${placement.yPercent + offset.y}%`,
-        transform: 'translateY(-50%)',
-        textAlign: 'center',
-        ...textStyleCss(base),
-        ...drag,
-      }}
-      onPointerDown={onDragStart}
-    >
-      {words}
-    </div>
-  )
+  return textLayers({
+    position: 'absolute',
+    left: `${8 + offset.x}%`,
+    width: '84%',
+    top: `${placement.yPercent + offset.y}%`,
+    transform: 'translateY(-50%)',
+    textAlign: 'center',
+  })
 }
 
 // Texto de ejemplo para las tarjetas de estilo si todavía no hay frases

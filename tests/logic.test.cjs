@@ -19,7 +19,7 @@ const { buildCutSegments, totalDuration } = require(`${B}/timeline.js`)
 const { buildCues, activeCue } = require(`${B}/cues.js`)
 const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
-const { STYLE_PRESETS, resolveStyle } = require(`${B}/styles/presets.js`)
+const { STYLE_PRESETS, resolveStyle, outlineLayers } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
 const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, FfmpegStallError, EXPORT_STALL_MS, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
@@ -137,7 +137,7 @@ test('cues: sin solapes, con duración y activeCue semiabierto como libass', () 
 })
 
 // ---- Sombra, contorno y contraste ----
-test('sombra y contorno: sombra por defecto en títulos y énfasis, contorno apagado, la sombra prevalece', () => {
+test('sombra y contorno: sombra por defecto en títulos y énfasis, contorno apagado y activable en los 5', () => {
   const shadowed = ['chispa', 'revista', 'titular']
   const simple = ['claro', 'foco']
   for (const id of Object.keys(STYLE_PRESETS)) {
@@ -146,9 +146,18 @@ test('sombra y contorno: sombra por defecto en títulos y énfasis, contorno apa
     if (shadowed.includes(id)) assert(p.base.shadowOffset > 0, `${id}: sombra por defecto`)
     if (simple.includes(id)) assert.strictEqual(p.base.shadowOffset, 0, `${id}: subtitulado simple sin sombra`)
     if (p.emphasis) assert(p.emphasis.shadowOffset > 0, `${id}: énfasis con sombra`)
+    assert.strictEqual(outlineLayers(p), null, `${id}: sin contorno, una sola capa`)
+    // con el check encendido hay contorno en los 5 estilos, también con sombra
     const withOutline = resolveStyle(STYLE_PRESETS[id], { outline: true })
-    if (shadowed.includes(id)) assert.strictEqual(withOutline.base.outlineWidth, 0, `${id}: la sombra prevalece`)
-    if (simple.includes(id)) assert(withOutline.base.outlineWidth > 0, `${id}: contorno activable`)
+    assert(withOutline.base.outlineWidth > 0, `${id}: contorno activable`)
+    assert(withOutline.base.outlineWidth <= 2.5, `${id}: contorno fino`)
+    assert.strictEqual(withOutline.base.shadowOffset, p.base.shadowOffset, `${id}: la sombra se mantiene`)
+    // dos capas: contorno sin sombras abajo, sombras sin contorno arriba
+    const { under, over } = outlineLayers(withOutline)
+    assert(under.base.outlineWidth > 0 && under.base.shadowOffset === 0, `${id}: capa de abajo solo contorno`)
+    assert(!under.emphasis || under.emphasis.shadowOffset === 0, `${id}: énfasis sin sombra abajo`)
+    assert.strictEqual(over.base.outlineWidth, 0, `${id}: capa de arriba sin contorno`)
+    assert.strictEqual(over.base.shadowOffset, p.base.shadowOffset, `${id}: capa de arriba con la sombra`)
   }
 })
 
@@ -171,13 +180,24 @@ test('ASS: sombra/contorno según el estilo, banda visible, WrapStyle 1 y tiempo
   // columnas del estilo: 5 OutlineColour, 16 Outline, 17 Shadow
   const foco = buildAss('foco', buildCues('foco', cut, segs), total)
   assert.deepStrictEqual(field(foco, 'Main').slice(16, 18), ['0', '0'], 'Foco por defecto sin contorno ni sombra')
-  const fm = field(buildAss('foco', buildCues('foco', cut, segs), total, undefined, { outline: true }), 'Main')
+  assert(!foco.includes('Style: MainU,'), 'sin contorno no hay capa de contorno')
+  const fm = field(buildAss('foco', buildCues('foco', cut, segs), total, undefined, { outline: true }), 'MainU')
   assert.strictEqual(fm[16], '2.5')
   assert.strictEqual(fm[5], '&H19100C0C', 'contorno #0C0C10 al 90%')
+  // Chispa con contorno: contorno fino detrás (capa 0) y la sombra arriba (capa 1)
   const chispa = buildAss('chispa', buildCues('chispa', cut, segs), total, undefined, { outline: true })
-  assert.deepStrictEqual(field(chispa, 'Main').slice(16, 18), ['0', '5'], 'Chispa: la sombra prevalece sobre el contorno')
+  assert.deepStrictEqual(field(chispa, 'MainU').slice(16, 18), ['2', '0'], 'Chispa: capa de contorno fino sin sombra')
+  assert.deepStrictEqual(field(chispa, 'Main').slice(16, 18), ['0', '5'], 'Chispa: capa de sombra sin contorno')
+  const cd = chispa.split('\n').filter((l) => l.startsWith('Dialogue:'))
+  const unders = cd.filter((l) => l.includes(',MainU,'))
+  const overs = cd.filter((l) => l.includes(',Main,'))
+  assert(unders.length > 0 && unders.length === overs.length, 'cada frase en las dos capas')
+  assert(unders.every((l) => l.startsWith('Dialogue: 0,')) && overs.every((l) => l.startsWith('Dialogue: 1,')), 'contorno detrás de la sombra')
+  const rv = buildAss('revista', buildCues('revista', cut, segs), total, undefined, { outline: true }).split('\n')
+  assert(rv.some((l) => /^Dialogue: 1,.*,RevLU,/.test(l)) && rv.some((l) => /^Dialogue: 2,.*,RevL,/.test(l)), 'Revista: banda 0, contorno 1, sombra 2')
   const claroOutline = buildAss('claro', buildCues('claro', cut, segs), total, undefined, { outline: true })
-  assert(/\\shad3\\4c&H000000&\\4a&H66&\\bord0/.test(claroOutline), 'énfasis con sombra y sin contorno')
+  assert(/\\shad3\\4c&H000000&\\4a&H66&/.test(claroOutline), 'énfasis con sombra en la capa de arriba')
+  assert(!/\\bord0/.test(claroOutline), 'la capa de arriba ya no lleva contorno que apagar')
   assert(foco.includes('WrapStyle: 1'))
   const rev = buildAss('revista', buildCues('revista', cut, segs), total)
   assert(/^Style: Band,Arial,64,&HDBFFFFFF,/.test(field(rev, 'Band').join(',')))

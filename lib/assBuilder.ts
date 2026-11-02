@@ -8,9 +8,11 @@ import { COLLISION_SHADOW, clampOffset, cueHitsImage, textRect, type TextOffset 
 import {
   STYLE_PRESETS,
   assFontSize,
+  outlineLayers,
   resolveStyle,
   type EmphasisSpec,
   type StyleOptions,
+  type StylePreset,
   type TextStyle,
 } from './styles/presets'
 
@@ -169,10 +171,15 @@ export function buildAss(
   ]
 
   const px = (p: number, size: number) => Math.round((p / 100) * size)
-  const shadowed = withCollisionShadow(preset.base)
-  const textOf = (cue: Cue, base: TextStyle) =>
-    preset.emphasis
-      ? cueText(cue, base, preset.emphasis)
+  // Contorno encendido: capa de abajo con el contorno fino, capa de arriba con
+  // las sombras (la sombra prevalece). Apagado: una sola capa.
+  const layers = outlineLayers(preset)
+  const over = layers ? layers.over : preset
+  const under = layers?.under ?? null
+  const shadowed = withCollisionShadow(over.base)
+  const textOf = (cue: Cue, p: StylePreset, base: TextStyle) =>
+    p.emphasis
+      ? cueText(cue, base, p.emphasis)
       : cue.words.map((w) => escapeAss(w.text)).filter(Boolean).join(' ')
   // Con \pos, libass sigue usando los márgenes del estilo para el ancho de corte
   // de línea: el ancho del bloque se mantiene y \pos lo mueve.
@@ -182,10 +189,14 @@ export function buildAss(
     const pl = preset.placement
     const [l0, l1] = pl.left
     const [r0, r1] = pl.right
-    styles.push(styleLine('RevL', preset.base, 4, px(l0, W), W - px(l1, W), 0))
-    styles.push(styleLine('RevR', preset.base, 6, px(r0, W), W - px(r1, W), 0))
+    styles.push(styleLine('RevL', over.base, 4, px(l0, W), W - px(l1, W), 0))
+    styles.push(styleLine('RevR', over.base, 6, px(r0, W), W - px(r1, W), 0))
     styles.push(styleLine('RevLS', shadowed, 4, px(l0, W), W - px(l1, W), 0))
     styles.push(styleLine('RevRS', shadowed, 6, px(r0, W), W - px(r1, W), 0))
+    if (under) {
+      styles.push(styleLine('RevLU', under.base, 4, px(l0, W), W - px(l1, W), 0))
+      styles.push(styleLine('RevRU', under.base, 6, px(r0, W), W - px(r1, W), 0))
+    }
     // Banda vertical: dibujo \p1 — con Fontsize 64 la escala del dibujo es 1 unidad = 1 px.
     // Es decoración del estilo: no se mueve con el texto.
     const x0 = px(pl.band[0], W)
@@ -208,26 +219,35 @@ export function buildAss(
     const y = px(50 + offset.y, H)
     for (const cue of cues) {
       const hit = hits(cue)
-      const text = textOf(cue, hit ? shadowed : preset.base)
+      const text = textOf(cue, over, hit ? shadowed : over.base)
       if (!text) continue
       const left = cue.side === 'left'
       const style = (left ? 'RevL' : 'RevR') + (hit ? 'S' : '')
       const pos = left ? `\\an4\\pos(${px(l0 + offset.x, W)},${y})` : `\\an6\\pos(${px(r1 + offset.x, W)},${y})`
-      // texto (capa 1) encima de la banda (capa 0), como en la preview
-      events.push(`Dialogue: 1,${assTime(cue.start)},${assTime(cue.end)},${style},,0,0,0,,{${pos}}${text}`)
+      const t0 = assTime(cue.start)
+      const t1 = assTime(cue.end)
+      // banda (capa 0), contorno (capa 1) y texto con sombra (capa 2), como en la preview
+      if (under) {
+        events.push(`Dialogue: 1,${t0},${t1},${left ? 'RevLU' : 'RevRU'},,0,0,0,,{${pos}}${textOf(cue, under, under.base)}`)
+      }
+      events.push(`Dialogue: ${under ? 2 : 1},${t0},${t1},${style},,0,0,0,,{${pos}}${text}`)
     }
   } else {
-    styles.push(styleLine('Main', preset.base, 5, px(8, W), px(8, W), 0))
+    styles.push(styleLine('Main', over.base, 5, px(8, W), px(8, W), 0))
     styles.push(styleLine('MainS', shadowed, 5, px(8, W), px(8, W), 0))
+    if (under) styles.push(styleLine('MainU', under.base, 5, px(8, W), px(8, W), 0))
     const x = px(50 + offset.x, W)
     const y = px(preset.placement.yPercent + offset.y, H)
     for (const cue of cues) {
       const hit = hits(cue)
-      const text = textOf(cue, hit ? shadowed : preset.base)
+      const text = textOf(cue, over, hit ? shadowed : over.base)
       if (!text) continue
-      events.push(
-        `Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},${hit ? 'MainS' : 'Main'},,0,0,0,,{\\an5\\pos(${x},${y})}${text}`
-      )
+      const t0 = assTime(cue.start)
+      const t1 = assTime(cue.end)
+      const pos = `{\\an5\\pos(${x},${y})}`
+      // contorno (capa 0) detrás del texto con sombra (capa 1)
+      if (under) events.push(`Dialogue: 0,${t0},${t1},MainU,,0,0,0,,${pos}${textOf(cue, under, under.base)}`)
+      events.push(`Dialogue: ${under ? 1 : 0},${t0},${t1},${hit ? 'MainS' : 'Main'},,0,0,0,,${pos}${text}`)
     }
   }
 

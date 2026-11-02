@@ -88,8 +88,9 @@ const NO_OUTLINE = { outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0 }
 // - Sombra activa por defecto en títulos y textos grandes (Chispa, Revista,
 //   Titular) y en las palabras de énfasis; apagada en subtitulado simple
 //   (Claro, Foco).
-// - Contorno opcional por estilo, apagado por defecto.
-// - Si sombra y contorno están activos a la vez, la sombra prevalece.
+// - Contorno opcional por estilo, apagado por defecto, activable en los 5 estilos.
+// - Si sombra y contorno están activos a la vez, se dibuja un contorno fino
+//   detrás de la sombra y la sombra sigue prevaleciendo visualmente.
 // - El contraste no se fuerza con contorno: el check avisa contra el frame real.
 export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
   chispa: {
@@ -100,7 +101,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
       color: '#F5E9CE', ...NO_OUTLINE,
       shadowOffset: 5, shadowAlpha: 0.55,
     },
-    outline: { width: 3, color: '#000000', alpha: 0.75 },
+    outline: { width: 2, color: '#000000', alpha: 0.75 },
     cueWords: 3,
     placement: { kind: 'center', yPercent: 31.5 },
     emphasis: {
@@ -132,7 +133,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
       color: '#FFFFFF', ...NO_OUTLINE,
       shadowOffset: 4, shadowAlpha: 0.55,
     },
-    outline: { width: 2.5, color: '#000000', alpha: 0.75 },
+    outline: { width: 2, color: '#000000', alpha: 0.75 },
     cueWords: 5,
     placement: { kind: 'center', yPercent: 49.5 },
     emphasis: {
@@ -182,14 +183,13 @@ export interface StyleOptions {
 
 /**
  * Estilo tal como se dibuja con las opciones de la usuaria. Lo usan la preview
- * y el export, así que los dos aplican la misma regla:
- * el contorno solo se dibuja donde no hay sombra (la sombra prevalece).
+ * y el export, así que los dos aplican la misma regla: con el check Contorno
+ * encendido, el estilo lleva su contorno fino, en todos los estilos.
  */
 export function resolveStyle(preset: StylePreset, opts: StyleOptions = {}): StylePreset {
-  const useOutline = !!opts.outline && preset.base.shadowOffset <= 0
   return {
     ...preset,
-    base: useOutline
+    base: opts.outline
       ? {
           ...preset.base,
           outlineWidth: preset.outline.width,
@@ -197,5 +197,26 @@ export function resolveStyle(preset: StylePreset, opts: StyleOptions = {}): Styl
           outlineAlpha: preset.outline.alpha,
         }
       : { ...preset.base, ...NO_OUTLINE },
+  }
+}
+
+/**
+ * Con contorno encendido, el texto se dibuja en dos capas para que el contorno
+ * quede detrás de la sombra (libass y CSS pintan el contorno encima de la
+ * sombra si van en la misma capa):
+ * - under: el texto con su contorno fino y sin ninguna sombra;
+ * - over: el mismo texto con sus sombras (base y énfasis) y sin contorno.
+ * La capa de arriba cubre el contorno donde se cruza con la sombra: la sombra
+ * prevalece visualmente. Sin contorno, devuelve null (una sola capa).
+ */
+export function outlineLayers(preset: StylePreset): { under: StylePreset; over: StylePreset } | null {
+  if (preset.base.outlineWidth <= 0) return null
+  return {
+    under: {
+      ...preset,
+      base: { ...preset.base, shadowOffset: 0, shadowAlpha: 0 },
+      emphasis: preset.emphasis ? { ...preset.emphasis, shadowOffset: 0, shadowAlpha: 0 } : null,
+    },
+    over: { ...preset, base: { ...preset.base, ...NO_OUTLINE } },
   }
 }
