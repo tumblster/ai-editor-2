@@ -16,7 +16,7 @@ if (!B || !R) {
 
 const { buildPhrases } = require(`${B}/phrases.js`)
 const { buildCutSegments, totalDuration } = require(`${B}/timeline.js`)
-const { buildCues, activeCue } = require(`${B}/cues.js`)
+const { buildCues, activeCue, cueLines } = require(`${B}/cues.js`)
 const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
 const { STYLE_PRESETS, resolveStyle, outlineLayers, DIFFUSE_SHADOW, shadowXY, shadowBlurCss, shadowBlurAss } = require(`${B}/styles/presets.js`)
@@ -231,6 +231,36 @@ test('sombra difusa: valores del manual VM traducidos (55%, desenfoque 17% del t
   const blurs = [...ass.matchAll(/\\blur([\d.]+)/g)].map((m) => +m[1])
   assert(blurs.length > 0 && blurs.every((b) => b > 0), 'el ASS lleva desenfoque en la sombra')
   assert(blurs.some((b) => Math.abs(b - shadowBlurAss(64 * 1.5)) < 0.01), 'la palabra de énfasis usa el desenfoque de su tamaño')
+})
+
+// ---- Regla 2: palabra resaltada sola en su línea ----
+test('palabra resaltada sola en su línea: cueLines, ASS (\\N) en los 5 estilos y en medio de la frase', () => {
+  const W = (t, emph = false) => ({ text: t, emph })
+  const show = (lines) => lines.map((l) => l.map((w) => (w.emph ? `[${w.text}]` : w.text)).join(' '))
+  assert.deepStrictEqual(show(cueLines([W('aprender', true), W('tres'), W('trucos')])), ['[aprender]', 'tres trucos'])
+  assert.deepStrictEqual(show(cueLines([W('tres'), W('trucos'), W('aprender', true), W('nuevos')])), ['tres trucos', '[aprender]', 'nuevos'])
+  assert.deepStrictEqual(show(cueLines([W('solo'), W('3', true), W('pasos'), W('y'), W('listo')])), ['solo', '[3]', 'pasos y listo'])
+  assert.deepStrictEqual(show(cueLines([W('sin'), W('énfasis')])), ['sin énfasis'], 'sin resaltada no hay corte')
+  const total = totalDuration(segs)
+  for (const id of Object.keys(STYLE_PRESETS)) {
+    const cues = buildCues(id, cut, segs)
+    const fills = buildAss(id, cues, total).split('\n').filter((l) => /^Dialogue: \d,.*,(Main|RevL|RevR),/.test(l))
+    assert.strictEqual(fills.length, cues.length, id)
+    cues.forEach((c, i) => {
+      const text = fills[i].slice(fills[i].indexOf('}', fills[i].indexOf(',,') ) + 1)
+      const lines = text.split('\\N')
+      const expected = cueLines(STYLE_PRESETS[id].emphasis ? c.words : c.words.map((w) => ({ ...w, emph: false })))
+      assert.strictEqual(lines.length, expected.length, `${id} cue ${i}: ${text}`)
+      // una línea con resaltada no lleva otra palabra
+      lines.forEach((l, li) => {
+        if (expected[li].some((w) => w.emph)) assert.strictEqual(expected[li].length, 1, `${id}: resaltada acompañada`)
+        if (/\{\\c&H/.test(l)) assert(!/\{\\r[^}]*\}\s*\S/.test(l), `${id}: tras la resaltada no sigue otra palabra en su línea: ${l}`)
+      })
+    })
+  }
+  // el ejemplo del Playbook: APRENDER sola arriba y "tres trucos" debajo
+  const ex = buildAss('chispa', [{ id: 'x', start: 0, end: 1, side: 'left', words: [W('aprender', true), W('tres'), W('trucos')] }], 1)
+  assert(/APRENDER\{\\r\}\\Ntres trucos/.test(ex), ex.split('\n').find((l) => l.includes('APRENDER')))
 })
 
 // ---- Texto movible e imágenes ----

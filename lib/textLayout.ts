@@ -29,7 +29,8 @@ export const COLLISION_SHADOW = { offset: DIFFUSE_SHADOW.distance, alpha: DIFFUS
 
 /**
  * Rectángulo aproximado del texto en % del lienzo [x0, y0, x1, y1]. Vertical:
- * hasta dos líneas alrededor del centro del bloque.
+ * hasta dos líneas base alrededor del centro del bloque, más la línea propia de
+ * la palabra resaltada si el estilo la tiene.
  */
 export function textRect(
   preset: StylePreset,
@@ -39,7 +40,9 @@ export function textRect(
 ): [number, number, number, number] {
   const p = preset.placement
   const lineH = preset.base.size * assFontScale(preset.base.font)
-  const halfH = ((lineH * 1.1) / canvas.h) * 100
+  // hasta dos líneas base; con palabra resaltada, una línea más para ella (regla 2)
+  const emphLines = preset.emphasis ? preset.emphasis.scale : 0
+  const halfH = ((lineH * (1.1 + emphLines / 2)) / canvas.h) * 100
   if (p.kind === 'blocks') {
     const [x0, x1] = side === 'left' ? p.left : p.right
     return [x0 + offset.x, 50 + offset.y - halfH, x1 + offset.x, 50 + offset.y + halfH]

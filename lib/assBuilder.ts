@@ -2,7 +2,7 @@
 // Los parámetros salen del mismo preset que usa el preview (lib/styles/presets.ts).
 
 import type { Layer, StylePresetId } from '@/types/project'
-import type { Cue } from './cues'
+import { cueLines, type Cue } from './cues'
 import { DEFAULT_CANVAS, type Canvas } from './canvas'
 import { COLLISION_SHADOW, clampOffset, cueHitsImage, textRect, type TextOffset } from './textLayout'
 import {
@@ -120,37 +120,37 @@ type LayerMode = 'fill' | 'shadow'
  */
 function cueText(cue: Cue, base: TextStyle, emph: EmphasisSpec | null, mode: LayerMode): string {
   const baseBlur = mode === 'shadow' ? `\\blur${shadowBlurAss(base.size)}` : ''
-  const parts: string[] = []
-  for (const w of cue.words) {
+  const word = (w: Cue['words'][number]): string => {
     let text = escapeAss(w.text)
-    if (!text) continue
-    if (w.emph && emph) {
-      const tags: string[] = []
-      tags.push(`\\c${assBgr(emph.color)}`)
-      if (emph.scale !== 1 || emph.font) {
-        tags.push(`\\fs${assFontSize(emph.font ?? base.font, base.size * emph.scale)}`)
-      }
-      if (emph.font) tags.push(`\\fn${emph.font}`)
-      if (emph.italic) tags.push('\\i1')
-      if (mode === 'shadow') {
-        // las palabras de énfasis llevan su sombra difusa
-        if (emph.shadowOffset > 0) {
-          tags.push(`\\shad${shadowXY(emph.shadowOffset).x}`)
-          tags.push(`\\4a${assAlpha(1 - emph.shadowAlpha)}`)
-          tags.push(`\\blur${shadowBlurAss(base.size * emph.scale)}`)
-        } else {
-          tags.push('\\4a&HFF&')
-        }
-      }
-      if (emph.uppercase) text = text.toUpperCase()
-      // \r vuelve al estilo; el desenfoque no es del estilo y se repone
-      parts.push(`{${tags.join('')}}${text}{\\r${baseBlur}}`)
-    } else {
-      parts.push(text)
+    if (!text) return ''
+    if (!(w.emph && emph)) return text
+    const tags: string[] = []
+    tags.push(`\\c${assBgr(emph.color)}`)
+    if (emph.scale !== 1 || emph.font) {
+      tags.push(`\\fs${assFontSize(emph.font ?? base.font, base.size * emph.scale)}`)
     }
+    if (emph.font) tags.push(`\\fn${emph.font}`)
+    if (emph.italic) tags.push('\\i1')
+    if (mode === 'shadow') {
+      // las palabras de énfasis llevan su sombra difusa
+      if (emph.shadowOffset > 0) {
+        tags.push(`\\shad${shadowXY(emph.shadowOffset).x}`)
+        tags.push(`\\4a${assAlpha(1 - emph.shadowAlpha)}`)
+        tags.push(`\\blur${shadowBlurAss(base.size * emph.scale)}`)
+      } else {
+        tags.push('\\4a&HFF&')
+      }
+    }
+    if (emph.uppercase) text = text.toUpperCase()
+    // \r vuelve al estilo; el desenfoque no es del estilo y se repone
+    return `{${tags.join('')}}${text}{\\r${baseBlur}}`
   }
-  const body = parts.join(' ')
-  return baseBlur ? `{${baseBlur}}${body}` : body
+  // regla 2: la palabra resaltada va sola en su línea (\N fuerza el salto)
+  const body = cueLines(emph ? cue.words : cue.words.map((w) => ({ ...w, emph: false })))
+    .map((line) => line.map(word).filter(Boolean).join(' '))
+    .filter(Boolean)
+    .join('\\N')
+  return baseBlur && body ? `{${baseBlur}}${body}` : body
 }
 
 /** ¿El cue deja ver alguna sombra (base, énfasis presente o choque con imagen)? */

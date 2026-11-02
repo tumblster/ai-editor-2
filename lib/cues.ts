@@ -17,6 +17,30 @@ export interface Cue {
   side: 'left' | 'right' // solo Revista alterna bloques
 }
 
+/**
+ * Líneas de un cue (Playbook regla 2): una palabra resaltada (otro color,
+ * tamaño, mayúsculas, cursiva u otra fuente) va sola en su línea, y las
+ * palabras del estilo base van juntas en las suyas. El corte se decide por
+ * estilo: la línea de la resaltada no se rellena con la palabra siguiente.
+ * Una línea base larga puede seguir partiéndose por ancho, nunca mezclando estilos.
+ * Lo usan la preview y el ASS para cortar igual.
+ */
+export function cueLines(words: CueWord[]): CueWord[][] {
+  const lines: CueWord[][] = []
+  let base: CueWord[] = []
+  for (const w of words) {
+    if (w.emph) {
+      if (base.length) lines.push(base)
+      base = []
+      lines.push([w])
+    } else {
+      base.push(w)
+    }
+  }
+  if (base.length) lines.push(base)
+  return lines
+}
+
 const STOPWORDS = new Set([
   'de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las', 'por', 'un', 'una',
   'para', 'con', 'no', 'su', 'al', 'lo', 'como', 'más', 'mas', 'pero', 'le', 'ya', 'o',

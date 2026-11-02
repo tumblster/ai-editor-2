@@ -5,7 +5,7 @@
 
 import type { CSSProperties } from 'react'
 
-import type { Cue } from '@/lib/cues'
+import { cueLines, type Cue, type CueWord } from '@/lib/cues'
 import {
   assFontScale,
   outlineLayers,
@@ -78,9 +78,9 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
     ? { pointerEvents: 'auto', cursor: 'move', touchAction: 'none', userSelect: 'none' }
     : {}
 
-  const wordsFor = (p: StylePreset, base: TextStyle) =>
-    (cue?.words ?? []).map((w, i) => {
-      const emphasis = p.emphasis
+  const wordsFor = (p: StylePreset, base: TextStyle) => {
+    const emphasis = p.emphasis
+    const word = (w: CueWord, i: number) => {
       if (!w.emph || !emphasis) {
         return <span key={i}>{w.text} </span>
       }
@@ -99,7 +99,14 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
           {w.text}{' '}
         </span>
       )
-    })
+    }
+    // regla 2: la palabra resaltada va sola en su línea; cada línea, un solo estilo
+    const words = (cue?.words ?? []).map((w) => (emphasis ? w : { ...w, emph: false }))
+    let n = 0
+    return cueLines(words).map((line, li) => (
+      <div key={li}>{line.map((w) => word(w, n++))}</div>
+    ))
+  }
 
   // capa de arriba (interactiva) y, si hay contorno, la de abajo (decorativa)
   const textLayers = (box: CSSProperties) => (
