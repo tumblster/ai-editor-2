@@ -3,6 +3,9 @@
 // Datos: transcripciones de prueba en testmedia/ (tr1.json, tr2.json, export-body.json).
 
 const assert = require('assert')
+const { mkdtempSync, writeFileSync, copyFileSync, rmSync } = require('fs')
+const { tmpdir } = require('os')
+const { join } = require('path')
 
 const B = process.argv[2] // lib/ compilado
 const R = process.argv[3] // raíz del repo
@@ -18,6 +21,7 @@ const { applyAutocut, formatSummary } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
 const { STYLE_PRESETS } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
+const { probeImage, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 
 const tr1 = require(`${R}/testmedia/tr1.json`).transcription
 const tr2 = require(`${R}/testmedia/tr2.json`).transcription
@@ -29,17 +33,10 @@ const V1_DUR = 14.0
 const V2_DUR = 2.166667
 const FPS = 30
 
-let passed = 0
-let failed = 0
+// Las pruebas se registran y se corren en orden al final (admiten async).
+const tests = []
 function test(name, fn) {
-  try {
-    fn()
-    passed++
-    console.log(`ok   - ${name}`)
-  } catch (err) {
-    failed++
-    console.log(`FAIL - ${name}\n       ${err.message}`)
-  }
+  tests.push({ name, fn })
 }
 
 const p1 = buildPhrases('v1', tr1, V1_DUR)
@@ -163,5 +160,62 @@ test('ASS: contorno opaco, banda visible, WrapStyle 1 y tiempos hacia abajo', ()
   assert(dialogue.some((d) => d.includes(',0:00:02.26,')), 'frontera a 68 fotogramas debe ser 0:00:02.26')
 })
 
-console.log(`\n${passed} pasan, ${failed} fallan`)
-process.exit(failed ? 1 : 0)
+// ---- Imágenes de apoyo y tiempo máximo de ffmpeg (usan ffmpeg/ffprobe del sistema) ----
+test('imagen corrupta: probeImage la rechaza rápido y acepta la válida', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ai-editor-img-'))
+  try {
+    const ok = join(dir, 'ok.png')
+    copyFileSync(`${R}/testmedia/imagen.png`, ok)
+    const valid = await probeImage(ok)
+    assert.strictEqual(valid, true, 'testmedia/imagen.png debe pasar')
+
+    const png = require('fs').readFileSync(ok)
+    const corrupt = {
+      'aleatoria.png': Buffer.from(Array.from({ length: 500 }, (_, i) => (i * 97 + 13) % 256)),
+      'truncada.png': png.subarray(0, 800),
+      'solo-cabecera.png': png.subarray(0, 8),
+      'vacia.png': Buffer.alloc(0),
+    }
+    for (const [name, bytes] of Object.entries(corrupt)) {
+      const p = join(dir, name)
+      writeFileSync(p, bytes)
+      const t0 = Date.now()
+      const result = await probeImage(p)
+      const ms = Date.now() - t0
+      assert.strictEqual(result, false, `${name} debe rechazarse`)
+      assert(ms < 5000, `${name} tardó ${ms} ms`)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('tiempo máximo: runFfmpeg mata ffmpeg y rechaza con FfmpegTimeoutError', async () => {
+  assert(exportTimeoutMs(0) >= 60_000, 'mínimo razonable')
+  assert(exportTimeoutMs(600) > exportTimeoutMs(10), 'crece con la duración')
+  const t0 = Date.now()
+  // entrada infinita: sin tiempo máximo nunca terminaría
+  const err = await runFfmpeg(['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=r=5', '-f', 'null', '-'], undefined, 1500)
+    .then(() => null)
+    .catch((e) => e)
+  const ms = Date.now() - t0
+  assert(err instanceof FfmpegTimeoutError, `debía ser FfmpegTimeoutError: ${err}`)
+  assert(ms < 6000, `tardó ${ms} ms en detenerse`)
+})
+
+;(async () => {
+  let passed = 0
+  let failed = 0
+  for (const { name, fn } of tests) {
+    try {
+      await fn()
+      passed++
+      console.log(`ok   - ${name}`)
+    } catch (err) {
+      failed++
+      console.log(`FAIL - ${name}\n       ${err.message}`)
+    }
+  }
+  console.log(`\n${passed} pasan, ${failed} fallan`)
+  process.exit(failed ? 1 : 0)
+})()

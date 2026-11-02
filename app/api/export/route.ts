@@ -7,7 +7,7 @@ import { NextResponse } from 'next/server'
 import { buildAss } from '@/lib/assBuilder'
 import { buildCues } from '@/lib/cues'
 import { COPY } from '@/lib/copy'
-import { probeVideo, runFfmpeg } from '@/lib/ffmpeg'
+import { exportTimeoutMs, probeImage, probeVideo, runFfmpeg } from '@/lib/ffmpeg'
 import { clientIp, rateLimit } from '@/lib/rateLimit'
 import {
   IMAGE_RE,
@@ -25,6 +25,7 @@ import type { Layer, PhraseUnit, StylePresetId } from '@/types/project'
 export const runtime = 'nodejs'
 
 const f = (n: number) => Math.max(0, n).toFixed(3)
+
 const f6 = (n: number) => Math.max(0, n).toFixed(6)
 const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), hi)
 
@@ -107,6 +108,15 @@ export async function POST(req: Request) {
       if (await fileExists(p)) {
         activeImages.push({ layer, path: p })
       }
+    }
+
+    // Cada imagen activa debe decodificarse. Una imagen corrupta dejaba a ffmpeg
+    // esperando fotogramas para siempre: se falla rápido, sin saltarla en silencio.
+    const uniquePaths = [...new Set(activeImages.map((img) => img.path))]
+    const decodable = await Promise.all(uniquePaths.map((p) => probeImage(p)))
+    const broken = uniquePaths.filter((_, i) => !decodable[i])
+    if (broken.length) {
+      throw new Error(`imagen de apoyo no decodificable (${broken.length})`)
     }
 
     // ---- ffmpeg ----
@@ -196,7 +206,7 @@ export async function POST(req: Request) {
       'out.mp4'
     )
 
-    await runFfmpeg(args, exportDir)
+    await runFfmpeg(args, exportDir, exportTimeoutMs(totalTl))
 
     // La usuaria cerró o canceló mientras ffmpeg trabajaba: nadie leerá el archivo.
     if (req.signal.aborted) {

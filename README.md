@@ -33,7 +33,11 @@ Cubren:
 - los segmentos alineados a fotograma y recortados a la duración real del video,
 - los cues,
 - la regla de contraste,
-- el archivo ASS.
+- el archivo ASS,
+- el rechazo rápido de imágenes corruptas,
+- el tiempo máximo de ffmpeg.
+
+Las dos últimas usan el `ffmpeg`/`ffprobe` del sistema.
 
 Sale con código 1 si alguna falla.
 
@@ -42,4 +46,6 @@ Sale con código 1 si alguna falla.
 Cada export se arma en `uploads/export-<id>/` (en `.gitignore`):
 
 - La carpeta se borra cuando termina la descarga, o si el export falla.
+- Antes de correr ffmpeg, cada imagen de apoyo activa se comprueba con ffprobe: tiene que decodificarse. Una imagen corrupta hace fallar el export con el mensaje cerrado, en lugar de dejar a ffmpeg colgado.
+- ffmpeg tiene un tiempo máximo de 2 min + 8 s por segundo exportado. Si lo supera, se mata, se borra la carpeta y el export falla con el mensaje cerrado.
 - Al empezar cada export, también se borran las carpetas `export-*` con más de 1 hora. Así se limpian las que quedaron por un corte del servidor.

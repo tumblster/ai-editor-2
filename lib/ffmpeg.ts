@@ -96,20 +96,109 @@ export function extractAudio(filePath: string, outPath: string): Promise<void> {
   return runFfmpeg(['-y', '-i', filePath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'aac', '-b:a', '48k', outPath])
 }
 
-/** Corre ffmpeg con un log de servidor; rechaza con el stderr final si falla. */
-export function runFfmpeg(args: string[], cwd?: string): Promise<void> {
+/**
+ * Comprueba que una imagen se pueda decodificar de verdad (ffprobe decodifica el
+ * primer fotograma). ffprobe sale con código 0 aunque la imagen esté corrupta,
+ * así que se exige un fotograma leído con ancho y alto. Si no, ffmpeg se queda
+ * esperando fotogramas de esa imagen para siempre durante el export.
+ */
+export function probeImage(filePath: string, timeoutMs = 15_000): Promise<boolean> {
+  return new Promise((resolve) => {
+    const proc = spawn(
+      'ffprobe',
+      [
+        '-v', 'error',
+        '-select_streams', 'v:0',
+        '-count_frames',
+        '-show_entries', 'stream=width,height,nb_read_frames',
+        '-of', 'json',
+        filePath,
+      ],
+      { env: getSpawnEnv() }
+    )
+    let stdout = ''
+    let settled = false
+    const done = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(ok)
+    }
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL')
+      done(false)
+    }, timeoutMs)
+    proc.stdout.on('data', (d) => (stdout += d.toString()))
+    proc.on('error', () => done(false))
+    proc.on('close', (code) => {
+      if (code !== 0) return done(false)
+      try {
+        const s = (JSON.parse(stdout) as {
+          streams?: { width?: number; height?: number; nb_read_frames?: string }[]
+        }).streams?.[0]
+        done(!!s && (s.width ?? 0) > 0 && (s.height ?? 0) > 0 && parseInt(s.nb_read_frames ?? '0', 10) >= 1)
+      } catch {
+        done(false)
+      }
+    })
+  })
+}
+
+/**
+ * Tiempo máximo de ffmpeg: 2 min fijos + 8 s por cada segundo de video
+ * exportado (1080x1920 con libx264 veryfast en un PC modesto va bastante más
+ * rápido). Si se supera, ffmpeg se mata y el export falla con el mensaje cerrado.
+ */
+export function exportTimeoutMs(totalSeconds: number): number {
+  return 120_000 + Math.ceil(Math.max(0, totalSeconds) * 8_000)
+}
+
+export class FfmpegTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`ffmpeg superó el tiempo máximo (${Math.round(ms / 1000)} s)`)
+    this.name = 'FfmpegTimeoutError'
+  }
+}
+
+/**
+ * Corre ffmpeg con un log de servidor; rechaza con el stderr final si falla.
+ * Con `timeoutMs`, si ffmpeg no termina a tiempo se mata (SIGTERM y, si no
+ * responde, SIGKILL) y se rechaza con FfmpegTimeoutError cuando el proceso ya
+ * salió — así la carpeta de trabajo se puede borrar sin archivos abiertos.
+ */
+export function runFfmpeg(args: string[], cwd?: string, timeoutMs?: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const proc = spawn('ffmpeg', args, { env: getSpawnEnv(), cwd })
     let stderr = ''
-    proc.stderr.on('data', (d) => (stderr += d.toString()))
+    let timedOut = false
+    let hardKill: ReturnType<typeof setTimeout> | undefined
+    const timer =
+      timeoutMs && timeoutMs > 0
+        ? setTimeout(() => {
+            timedOut = true
+            proc.kill('SIGTERM')
+            hardKill = setTimeout(() => proc.kill('SIGKILL'), 3_000)
+          }, timeoutMs)
+        : undefined
+    proc.stderr.on('data', (d) => {
+      stderr += d.toString()
+      if (stderr.length > 64_000) stderr = stderr.slice(-16_000)
+    })
     proc.on('close', (code) => {
-      if (code === 0) resolve()
+      if (timer) clearTimeout(timer)
+      if (hardKill) clearTimeout(hardKill)
+      if (timedOut) {
+        console.error('[ffmpeg] tiempo máximo superado, proceso detenido')
+        reject(new FfmpegTimeoutError(timeoutMs ?? 0))
+      } else if (code === 0) resolve()
       else {
         console.error('[ffmpeg] exit', code, 'última línea:', stderr.split('\n').slice(-6).join(' | '))
         reject(new Error(`ffmpeg exited with code ${code}`))
       }
     })
     proc.on('error', (err) => {
+      if (timer) clearTimeout(timer)
+      if (hardKill) clearTimeout(hardKill)
       console.error('[ffmpeg] spawn error', err)
       reject(err)
     })

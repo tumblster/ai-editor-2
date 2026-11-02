@@ -7,7 +7,8 @@
 // 1. Compila lib/ con el `tsc` de devDependencies a una carpeta temporal del
 //    sistema (os.tmpdir), nunca dentro del repo.
 // 2. Corre tests/logic.test.cjs contra esa compilación, con las transcripciones
-//    de prueba de testmedia/.
+//    de prueba de testmedia/. Las pruebas de imagen y de tiempo máximo usan el
+//    ffmpeg/ffprobe del sistema (el mismo que usa el export).
 // 3. Borra la carpeta temporal.
 // Sale con código 0 si todas pasan y 1 si alguna falla.
 
@@ -26,6 +27,7 @@ const files = [
   'lib/contrast.ts',
   'lib/assBuilder.ts',
   'lib/styles/presets.ts',
+  'lib/ffmpeg.ts',
   'types/project.ts',
 ]
 
@@ -44,6 +46,8 @@ try {
         skipLibCheck: true,
         esModuleInterop: true,
         lib: ['dom', 'es2020'],
+        types: ['node'],
+        typeRoots: [join(root, 'node_modules', '@types')],
         rootDir: root,
         outDir: join(outDir, 'build'),
         baseUrl: root,
