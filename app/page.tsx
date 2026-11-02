@@ -13,9 +13,10 @@ import StylePicker from '@/components/StylePicker'
 import Timeline from '@/components/Timeline'
 import TranscriptionView from '@/components/TranscriptionView'
 import VideoUploader, { type UploaderBusy } from '@/components/VideoUploader'
-import { applyAutocut, formatSummary, type AutocutOptions, type AutocutSummary } from '@/lib/autocut'
+import { applyAutocut, formatSummary, type AutocutOptions } from '@/lib/autocut'
 import { COPY } from '@/lib/copy'
-import { buildCues } from '@/lib/cues'
+import { activeCue, buildCues } from '@/lib/cues'
+import { failsContrast, sampleZoneLuminance, zoneFor } from '@/lib/contrast'
 import { historyReducer } from '@/lib/history'
 import { buildPhrases } from '@/lib/phrases'
 import { STYLE_PRESETS } from '@/lib/styles/presets'
@@ -39,8 +40,6 @@ export default function Page() {
   const [busy, setBusy] = useState<UploaderBusy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [summary, setSummary] = useState<string | null>(null)
-  const [lastCounts, setLastCounts] = useState<AutocutSummary | null>(null)
-  const [restored, setRestored] = useState(false)
 
   const [history, dispatchHistory] = useReducer(historyReducer, {
     past: [],
@@ -162,25 +161,16 @@ export default function Page() {
           return
         }
         const tr = { ...data.transcription, duration: data.transcription.duration || newVideos[i].duration }
-        newPhrases = newPhrases.concat(buildPhrases(newVideos[i].id, tr))
+        newPhrases = newPhrases.concat(buildPhrases(newVideos[i].id, tr, newVideos[i].duration))
         newVideos[i] = { ...newVideos[i], transcription: tr }
       }
 
-      // capas de imagen con valores por defecto (reels: 40% x 21%, abajo centro, ~3 s)
+      // capas de imagen con valores por defecto (40% x 21%, abajo-centro, 3 s desde el cabezal)
       const baseLayers: Layer[] = edit.imageLayers
-      const newLayers: Layer[] = newImages.map((img, i) => ({
-        id: `img-${img.id}-${i}`,
-        type: 'image' as const,
-        src: img.id,
-        start: 0,
-        end: 3,
-        order: 10 + i,
-        x: 50,
-        y: 78,
-        width: 40,
-        height: 21,
-        enabled: true,
-      }))
+      const at = playback.getTime()
+      const newLayers: Layer[] = newImages.map((img, i) =>
+        defaultImageLayer(img.id, at, baseLayers.length + i)
+      )
 
       setVideos((prev) => [...prev, ...newVideos])
       setImages((prev) => [...prev, ...newImages])
@@ -196,7 +186,6 @@ export default function Page() {
   // ---- acciones de edición ----
   const toggleUnit = (id: string) => {
     setEdit({ ...edit, phrases: phrases.map((p) => (p.id === id ? { ...p, removed: !p.removed, reason: !p.removed ? 'manual' : undefined } : p)) })
-    setRestored(true)
   }
 
   const adjustUnit = (id: string, start: number, end: number) => {
@@ -209,9 +198,7 @@ export default function Page() {
   const runAutocut = (opts: AutocutOptions) => {
     const { phrases: next, summary: s } = applyAutocut(phrases, opts)
     setEdit({ ...edit, phrases: next })
-    setLastCounts(s)
     setSummary(formatSummary(s))
-    setRestored(false)
   }
 
   const patchImageLayer = (layerId: string, patch: Partial<Layer>) => {
@@ -237,17 +224,35 @@ export default function Page() {
 
   const removeAllImageLayers = () => setEdit({ ...edit, imageLayers: [] })
 
-  // ---- contraste: verificación simple en preview ----
-  const contrastIssue = useMemo(() => {
-    if (!preset) return false
-    // Foco y Titular usan amarillo: la regla exige sombra u outline, el preset ya la lleva;
-    // se marca solo si el preset no tiene ningún refuerzo (defensivo).
-    if (preset.id === 'foco' || preset.id === 'titular') {
-      const e = preset.emphasis
-      return !e || (!e.outlineWidth && preset.base.shadowOffset === 0 && preset.base.outlineWidth === 0)
+  // una imagen borrada de la pista se vuelve a poner con un clic en el panel
+  const addImageLayer = (imageId: string) => {
+    const t = Math.min(playback.getTime(), Math.max(0, playback.duration - IMAGE_DEFAULT_SECONDS))
+    setEdit({
+      ...edit,
+      imageLayers: [...edit.imageLayers, defaultImageLayer(imageId, t, edit.imageLayers.length)],
+    })
+  }
+
+  // ---- contraste: verificado contra el fotograma real del preview ----
+  const [contrastIssue, setContrastIssue] = useState(false)
+  useEffect(() => {
+    if (!preset) {
+      setContrastIssue(false)
+      return
     }
-    return preset.base.shadowOffset === 0 && preset.base.outlineWidth === 0
-  }, [preset])
+    const canvas = document.createElement('canvas')
+    let last = 0
+    return playback.subscribe((t) => {
+      const now = performance.now()
+      if (now - last < 400) return
+      last = now
+      const cue = activeCue(cues, t)
+      const el = playback.activeVideoElement()
+      if (!cue || !el) return
+      const lum = sampleZoneLuminance(el, zoneFor(preset, cue.side), canvas)
+      if (lum !== null) setContrastIssue(failsContrast(preset, lum))
+    })
+  }, [preset, cues, playback])
 
   const canExport = videos.length > 0 && segments.length > 0
 
@@ -262,7 +267,6 @@ export default function Page() {
   return (
     <main className="editor">
       <header className="editor-header">
-        <h1>Editor</h1>
         <div className="header-actions">
           <button
             type="button"
@@ -290,9 +294,6 @@ export default function Page() {
             <h2>Autorrecorte</h2>
           </div>
           <AutocutPanel onApply={runAutocut} summary={summary} />
-          {restored && lastCounts && (
-            <p className="autocut-summary">Hay segmentos restaurados después del último Autorrecorte.</p>
-          )}
         </section>
 
         <section className="panel">
@@ -312,15 +313,16 @@ export default function Page() {
           onToggle={toggleImageLayer}
           onRemove={removeImageLayer}
           onRemoveAll={removeAllImageLayers}
+          onAdd={addImageLayer}
         />
 
         <ExportButton
+          disabled={!canExport}
           videos={videos.map((v) => ({ id: v.id }))}
           phrases={phrases}
           imageLayers={edit.imageLayers}
           styleId={edit.styleId}
         />
-        {!canExport && <p className="form-error">No hay segmentos para exportar.</p>}
       </div>
 
       <div className="editor-stage">
@@ -382,6 +384,26 @@ export default function Page() {
   )
 }
 
+const IMAGE_DEFAULT_SECONDS = 3
+
+/** Imagen de apoyo por defecto: 40% de ancho x 21% de alto, abajo-centro (debajo de la cara), 3 s. */
+function defaultImageLayer(imageId: string, start: number, index: number): Layer {
+  const s = Math.max(0, start)
+  return {
+    id: `img-${imageId}-${Date.now().toString(36)}-${index}`,
+    type: 'image',
+    src: imageId,
+    start: s,
+    end: s + IMAGE_DEFAULT_SECONDS,
+    order: 10 + index,
+    x: 50,
+    y: 78,
+    width: 40,
+    height: 21,
+    enabled: true,
+  }
+}
+
 interface ProjectSnapshot {
   videos: VideoAsset[]
   images: ImageAsset[]
@@ -399,8 +421,15 @@ function VideoAddButton({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button type="button" className="btn btn-primary" disabled={!!busy} onClick={() => setOpen(true)}>
-        +
+      <button
+        type="button"
+        className="btn btn-primary"
+        disabled={!!busy}
+        aria-busy={!!busy}
+        aria-label="Añadir videos o imágenes"
+        onClick={() => setOpen(true)}
+      >
+        {busy ? <span className="spinner" aria-hidden /> : '+'}
       </button>
       {open && (
         <div className="modal-scrim" onClick={() => setOpen(false)}>

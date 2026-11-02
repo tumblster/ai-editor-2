@@ -1,7 +1,7 @@
 'use client'
 
 // Selector de estilo: vista previa a la izquierda, tarjetas a la derecha con el
-// mismo clip de ejemplo, botones Back y Next, y sorpresa (dado).
+// mismo clip de ejemplo, y botones Back y Next.
 
 import { CaptionRender, StyleThumb, EXAMPLE_WORDS } from './CaptionRender'
 import { DESIGN_H, DESIGN_W, STYLE_PRESETS, STYLE_IDS } from '@/lib/styles/presets'
@@ -41,12 +41,6 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
     else onSelect(raw === -1 ? null : ids[raw])
   }
 
-  const surprise = () => {
-    let pick = ids[Math.floor(Math.random() * ids.length)]
-    if (pick === styleId) pick = ids[(ids.indexOf(pick) + 1) % ids.length]
-    onSelect(pick)
-  }
-
   const preset = styleId ? STYLE_PRESETS[styleId] : null
 
   return (
@@ -61,14 +55,10 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
               position: 'relative',
             }}
             ref={(el) => {
-              if (el) el.style.transform = `scale(${el.parentElement ? el.parentElement.clientWidth / DESIGN_W : 0.15})`
+              if (el) el.style.transform = `scale(${(el.parentElement?.clientWidth || 120) / DESIGN_W})`
             }}
           >
-            {preset ? (
-              <StylePreviewInner presetId={preset.id} />
-            ) : (
-              <div className="style-none">Sin estilo — export limpio</div>
-            )}
+            {preset && <StylePreviewInner presetId={preset.id} />}
           </div>
         </div>
       </div>
@@ -93,16 +83,6 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
         </button>
         <button type="button" className="btn btn-ghost" onClick={() => step(1)}>
           Next
-        </button>
-        <button type="button" className="icon-btn" title="Sorpresa" onClick={surprise}>
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
-            <rect x="4" y="4" width="16" height="16" rx="3.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <circle cx="9" cy="9" r="1.3" fill="currentColor" />
-            <circle cx="15" cy="9" r="1.3" fill="currentColor" />
-            <circle cx="9" cy="15" r="1.3" fill="currentColor" />
-            <circle cx="15" cy="15" r="1.3" fill="currentColor" />
-            <circle cx="12" cy="12" r="1.3" fill="currentColor" />
-          </svg>
         </button>
         {contrastIssue && (
           <span className="contrast-warn" title="Revisa el contraste del texto contra el video">

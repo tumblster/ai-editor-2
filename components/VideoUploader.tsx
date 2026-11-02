@@ -52,13 +52,7 @@ export default function VideoUploader({ compact, busy, error, onConfirm }: Props
 
   return (
     <div className={`uploader ${compact ? 'uploader-compact' : ''}`}>
-      {!compact && (
-        <div className="uploader-head">
-          <h1>Tu editor de video</h1>
-          <p>Sube uno o más videos, e imágenes de apoyo si quieres.</p>
-        </div>
-      )}
-
+      {/* Sin título: el botón y la zona drag-and-drop son suficientes (copy cerrado de PLAN.md) */}
       <div
         className={`dropzone ${dragOver ? 'dropzone-over' : ''}`}
         onDragOver={(e) => {
