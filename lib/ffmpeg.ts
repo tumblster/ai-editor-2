@@ -21,6 +21,7 @@ export interface ProbeResult {
   width: number
   height: number
   duration: number
+  fps: number
   hasAudio: boolean
 }
 
@@ -28,16 +29,31 @@ interface FfprobeStream {
   codec_type?: string
   width?: number
   height?: number
+  duration?: string
+  avg_frame_rate?: string
+  r_frame_rate?: string
 }
 
-/** Sondea el video: dimensiones, duración y si tiene pista de audio. */
+function parseRate(rate?: string): number {
+  if (!rate) return 0
+  const [n, d] = rate.split('/').map(Number)
+  const v = d ? n / d : n
+  return Number.isFinite(v) && v >= 1 && v <= 240 ? v : 0
+}
+
+/**
+ * Sondea el video: dimensiones, duración y si tiene pista de audio.
+ * La duración es la de la pista de video (lo que el export puede mostrar):
+ * el contenedor puede declarar más si el audio es más largo, y Whisper puede
+ * devolver palabras que terminan después del último fotograma.
+ */
 export function probeVideo(filePath: string): Promise<ProbeResult> {
   return new Promise((resolve) => {
     const proc = spawn(
       'ffprobe',
       [
         '-v', 'error',
-        '-show_entries', 'stream=codec_type,width,height',
+        '-show_entries', 'stream=codec_type,width,height,duration,avg_frame_rate,r_frame_rate',
         '-show_entries', 'format=duration',
         '-of', 'json',
         filePath,
@@ -46,7 +62,7 @@ export function probeVideo(filePath: string): Promise<ProbeResult> {
     )
     let stdout = ''
     proc.stdout.on('data', (d) => (stdout += d.toString()))
-    const fallback: ProbeResult = { width: 1080, height: 1920, duration: 0, hasAudio: true }
+    const fallback: ProbeResult = { width: 1080, height: 1920, duration: 0, fps: 30, hasAudio: true }
     proc.on('close', (code) => {
       if (code !== 0 || !stdout) {
         resolve(fallback)
@@ -58,10 +74,13 @@ export function probeVideo(filePath: string): Promise<ProbeResult> {
           format?: { duration?: string }
         }
         const video = (json.streams ?? []).find((s) => s.codec_type === 'video')
+        const formatDur = parseFloat(json.format?.duration ?? '0') || 0
+        const videoDur = parseFloat(video?.duration ?? '0') || 0
         resolve({
           width: video?.width ?? 1080,
           height: video?.height ?? 1920,
-          duration: parseFloat(json.format?.duration ?? '0') || 0,
+          duration: videoDur > 0 ? (formatDur > 0 ? Math.min(videoDur, formatDur) : videoDur) : formatDur,
+          fps: parseRate(video?.avg_frame_rate) || parseRate(video?.r_frame_rate) || 30,
           hasAudio: (json.streams ?? []).some((s) => s.codec_type === 'audio'),
         })
       } catch {

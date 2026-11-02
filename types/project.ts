@@ -77,7 +77,8 @@ export interface VideoAsset {
   name: string
   kind: 'video'
   url: string
-  duration: number
+  duration: number // duración de la pista de video (ffprobe)
+  fps?: number // fotogramas por segundo del original; los cortes se alinean a esta rejilla
   width: number
   height: number
   hasAudio: boolean

@@ -3,14 +3,49 @@
 
 import type { CutSegment, PhraseUnit, VideoAsset } from '@/types/project'
 
-/** Segmentos mantenidos, en orden de video y de tiempo — la lista de cortes. */
+/**
+ * Segmentos mantenidos, en orden de video y de tiempo — la lista de cortes.
+ * Si se conoce la duración real del video, cada segmento se recorta a ella:
+ * una unidad no puede durar más que los fotogramas que existen (si no, la
+ * línea de tiempo, los subtítulos y el export se desfasan).
+ * Los bordes se alinean a la rejilla de fotogramas del original: así cada
+ * segmento dura exactamente sus fotogramas y el tiempo de la línea de tiempo
+ * (preview, subtítulos, imágenes) coincide con el MP4 sin desfase acumulado.
+ */
+export const DEFAULT_FPS = 30
+
+export function snapToFrame(t: number, fps: number): number {
+  return Math.round(t * fps) / fps
+}
+
 export function buildCutSegments(
-  videos: Pick<VideoAsset, 'id'>[],
+  videos: (Pick<VideoAsset, 'id'> & { duration?: number; fps?: number })[],
   phrases: PhraseUnit[]
 ): CutSegment[] {
   const videoIndex = new Map(videos.map((v, i) => [v.id, i]))
+  const metaById = new Map(
+    videos.map((v) => [
+      v.id,
+      {
+        max: v.duration && v.duration > 0 ? v.duration : Infinity,
+        fps: v.fps && v.fps > 0 ? v.fps : DEFAULT_FPS,
+      },
+    ])
+  )
+  const clampUnit = (p: PhraseUnit) => {
+    const meta = metaById.get(p.videoId) ?? { max: Infinity, fps: DEFAULT_FPS }
+    // el último fotograma completo dentro de la duración real
+    const lastEdge = Number.isFinite(meta.max) ? Math.floor(meta.max * meta.fps + 1e-6) / meta.fps : Infinity
+    const start = Math.min(snapToFrame(p.start, meta.fps), lastEdge)
+    const end = Math.min(snapToFrame(p.end, meta.fps), lastEdge)
+    return { start, end }
+  }
   const kept = phrases
-    .filter((p) => !p.removed && p.end > p.start)
+    .filter((p) => {
+      if (p.removed) return false
+      const c = clampUnit(p)
+      return c.end - c.start > 1e-6
+    })
     .filter((p) => videoIndex.has(p.videoId))
     .sort((a, b) => {
       const va = videoIndex.get(a.videoId) ?? 0
@@ -21,16 +56,17 @@ export function buildCutSegments(
   const segments: CutSegment[] = []
   let tl = 0
   for (const u of kept) {
+    const { start, end } = clampUnit(u)
     segments.push({
       unitId: u.id,
       videoId: u.videoId,
       videoIndex: videoIndex.get(u.videoId) ?? 0,
-      srcStart: u.start,
-      srcEnd: u.end,
+      srcStart: start,
+      srcEnd: end,
       tlStart: tl,
-      tlEnd: tl + (u.end - u.start),
+      tlEnd: tl + (end - start),
     })
-    tl += u.end - u.start
+    tl += end - start
   }
   return segments
 }
