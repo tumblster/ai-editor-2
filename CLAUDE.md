@@ -98,6 +98,11 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
 - **Amarillo plano sin sombra sobre fondo claro** siempre se marca como fallo de contraste.
 - Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra.
 
+### Fuentes y prueba de la ñ (Playbook, manual VM p. 13)
+- Las fuentes de los 5 estilos **no cambian**: Trebuchet MS, Georgia y Arial.
+- **Montserrat, Playfair Display y Classic** son las fuentes base del manual VM (sin borde y con sombra negra). Quedan solo como referencia, **no como reemplazo** en esta fase.
+- **Prueba de la ñ y las tildes:** ninguna fuente usada puede achicar ni sustituir la ñ, las tildes ni los apóstrofes. `npm test` la corre con libass, el renderizador del export: sin signos tomados de otra fuente, Ñ y ñ del mismo ancho que N y n con la tilde visible, y apóstrofes con tamaño real.
+
 ### Decisiones del usuario aplicadas en Fase 1
 - **Autorrecorte:** al aplicarlo se avisa con un popup tipo toast de 5 segundos, cerrable al tocarlo, con el texto **Autorrecorte listo**. No hay resumen con desglose en la UI. Lo quitado queda marcado en la línea de tiempo y en la transcripción.
 - **Botón dividido de autorrecorte:**

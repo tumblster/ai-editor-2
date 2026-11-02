@@ -4,6 +4,7 @@
 
 const assert = require('assert')
 const { mkdtempSync, writeFileSync, copyFileSync, rmSync } = require('fs')
+const { spawnSync } = require('child_process')
 const { tmpdir } = require('os')
 const { join } = require('path')
 
@@ -440,6 +441,68 @@ test('watchdog: ffmpeg sin progreso se mata antes del techo y avanzando no se co
     { timeoutMs: 20_000, stallMs: 1500 }
   )
   assert(Date.now() - t0 >= 2500, 'debía correr ~3 s sin cortarse')
+})
+
+// ---- Prueba de la ñ y las tildes (manual VM p. 13), con libass, el renderizador del export ----
+test('ñ y tildes: ninguna fuente de los 5 estilos achica ni sustituye ñ, tildes ni apóstrofes', () => {
+  // fuentes en uso: base y énfasis de cada estilo (nombre, negrita, cursiva)
+  const fonts = new Map()
+  for (const p of Object.values(STYLE_PRESETS)) {
+    const b = p.base
+    fonts.set(`${b.font}|${b.bold}|${b.italic}`, { font: b.font, bold: b.bold, italic: b.italic })
+    if (p.emphasis) {
+      const f = p.emphasis.font ?? b.font
+      const it = p.emphasis.italic || b.italic
+      fonts.set(`${f}|${b.bold}|${it}`, { font: f, bold: b.bold, italic: it })
+    }
+  }
+  const dir = mkdtempSync(join(tmpdir(), 'ai-editor-tildes-'))
+  const SIZE = 100
+  const W = 1200, H = 300
+  // renderiza un texto con libass y devuelve log y caja del texto (px blancos)
+  const render = (f, text) => {
+    const ass = join(dir, 't.ass')
+    writeFileSync(ass, [
+      '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, '',
+      '[V4+ Styles]',
+      'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+      `Style: S,${f.font},${SIZE},&H00FFFFFF,&HFFFFFFFF,&H00000000,&H00000000,${f.bold ? -1 : 0},${f.italic ? -1 : 0},0,0,100,100,0,0,1,0,0,5,0,0,0,1`,
+      '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      `Dialogue: 0,0:00:00.00,0:00:01.00,S,,0,0,0,,{\\pos(${W / 2},${H / 2})}${text}`, '',
+    ].join('\n'), 'utf-8')
+    const r = spawnSync('ffmpeg', ['-v', 'verbose', '-f', 'lavfi', '-i', `color=black:s=${W}x${H}:d=1`, '-vf', 'subtitles=t.ass', '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'gray', '-'], { cwd: dir, maxBuffer: 1 << 26 })
+    const px = r.stdout
+    let x0 = W, x1 = -1, y0 = H, y1 = -1
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (px[y * W + x] > 128) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y
+    }
+    return { log: r.stderr.toString(), box: { w: x1 - x0 + 1, h: y1 - y0 + 1, top: y0, bottom: y1 } }
+  }
+  try {
+    for (const f of fonts.values()) {
+      const tag = `${f.font}${f.bold ? ' negrita' : ''}${f.italic ? ' cursiva' : ''}`
+      // 1) ningún signo del español cae en otra fuente (eso es lo que achica la ñ)
+      const all = render(f, 'AÑOS años ÁÉÍÓÚÜÑ áéíóúüñ ¿¡ \' ’')
+      const missing = [...all.log.matchAll(/Glyph (0x[0-9A-Fa-f]+) not found/g)].map((m) => String.fromCodePoint(parseInt(m[1], 16)))
+      assert.deepStrictEqual(missing, [], `${tag}: signos tomados de otra fuente: ${missing.join(' ')}`)
+      const chosen = (all.log.match(/fontselect: \([^)]*\) -> ([^,]+)/) || [])[1]
+      // 2) Ñ y ñ: mismo ancho que N y n, y la tilde sube de verdad (no se achica)
+      for (const [plain, tilde] of [['N', 'Ñ'], ['n', 'ñ']]) {
+        const a = render(f, plain).box, b = render(f, tilde).box
+        assert(Math.abs(a.w - b.w) <= Math.max(2, a.w * 0.06), `${tag}: ${tilde} (${b.w}px) no mide como ${plain} (${a.w}px)`)
+        assert(Math.abs(a.bottom - b.bottom) <= 2, `${tag}: ${tilde} cambia de línea base`)
+        assert(a.top - b.top >= SIZE * 0.08, `${tag}: la tilde de ${tilde} casi no sube (${a.top - b.top}px)`)
+      }
+      // 3) apóstrofes con tamaño real
+      for (const ap of ["'", '’']) {
+        const box = render(f, ap).box
+        assert(box.h >= SIZE * 0.12 && box.w >= 2, `${tag}: apóstrofe ${ap} achicado (${box.w}x${box.h})`)
+      }
+      console.log(`       ${tag.padEnd(26)} → ${chosen ? chosen.split('/').pop() : '?'}: sin sustituciones, Ñ/ñ y apóstrofes bien`)
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 ;(async () => {

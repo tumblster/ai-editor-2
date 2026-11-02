@@ -203,6 +203,11 @@ Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin
 - Número o dato destacado en amarillo, siempre con sombra (palabra de énfasis)
 - Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra
 
+### Fuentes y prueba de la ñ (Playbook, manual VM p. 13)
+- Fuentes de los 5 estilos, sin cambios: Trebuchet MS (Chispa, Foco), Georgia (Revista y énfasis de Titular) y Arial (Titular, Claro).
+- Fuentes base del manual VM, **solo anotadas, no reemplazan a las actuales**: Montserrat, Playfair Display y Classic, sin borde y con sombra negra.
+- **Prueba de la ñ y las tildes** (en `npm test`, con libass): ninguna fuente en uso, base ni énfasis, puede achicar ni sustituir ÁÉÍÓÚÜÑ, áéíóúüñ, ¿¡ ni los apóstrofes ' ’. La Ñ y la ñ deben medir como la N y la n, con la tilde visible. Si una fuente falla, no se usa.
+
 ### Sombra y contorno (decisión del usuario)
 - **Sombra activa por defecto** en títulos y textos grandes (Chispa, Revista, Titular) y en las palabras de énfasis de todos los estilos. **Apagada** en subtitulado simple (Claro, Foco).
 - **Contorno opcional por estilo, apagado por defecto.** Por defecto solo hay sombra y el contorno no se dibuja.

@@ -36,10 +36,11 @@ Cubren:
 - el archivo ASS,
 - el aspecto del video (incluido el video de móvil rotado),
 - el texto movible y la sombra cuando una imagen queda debajo,
+- la ñ, las tildes y los apóstrofes en las fuentes de los 5 estilos (con libass),
 - el rechazo rápido de imágenes corruptas,
 - el tiempo máximo y el watchdog de progreso de ffmpeg.
 
-Las pruebas de video rotado, imagen corrupta, tiempo máximo y watchdog usan el `ffmpeg`/`ffprobe` del sistema.
+Las pruebas de video rotado, ñ y tildes, imagen corrupta, tiempo máximo y watchdog usan el `ffmpeg`/`ffprobe` del sistema.
 
 Sale con código 1 si alguna falla.
 
