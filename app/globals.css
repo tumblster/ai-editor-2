@@ -70,6 +70,8 @@ button {
   border: none;
   background: none;
   padding: 0;
+  /* sin el resaltado azul de toque del navegador; el foco por teclado conserva su contorno */
+  -webkit-tap-highlight-color: transparent;
 }
 input[type='checkbox'] {
   margin: 0;
@@ -377,6 +379,79 @@ button:disabled {
   height: 20px;
   margin: 0;
   flex: none;
+}
+
+/* ---- autorrecorte: botón dividido + desplegable ---- */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.split-btn {
+  display: flex;
+  gap: var(--s1);
+}
+.split-main {
+  flex: 1;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+}
+.split-toggle {
+  width: 44px;
+  padding: 0;
+  flex: none;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+.split-chevron {
+  transition: transform 160ms var(--ease-out);
+}
+.split-toggle[aria-expanded='true'] .split-chevron {
+  transform: rotate(180deg);
+}
+/* cuántos de los 3 interruptores están activos */
+.split-pips {
+  display: inline-flex;
+  gap: var(--s1);
+}
+.split-pips i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-dim);
+}
+.split-pips i.is-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+/* se abre dentro del panel: nunca lo recorta la columna con scroll ni lo tapa el player */
+.autocut-menu {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s1) var(--s3);
+  background: var(--bg-elev2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  animation: menu-in 160ms var(--ease-out);
+}
+.autocut-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  font-size: 16px;
+  cursor: pointer;
 }
 
 /* ---- preview ---- */
@@ -1002,6 +1077,11 @@ button:disabled {
   }
   .transcription {
     max-height: none;
+  }
+  /* al abrir, el desplegable queda debajo del player fijo, no detrás */
+  .autocut-menu {
+    scroll-margin-top: calc(45svh + 16px);
+    scroll-margin-bottom: var(--s3);
   }
 }
 
