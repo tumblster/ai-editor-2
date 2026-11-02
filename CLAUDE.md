@@ -91,7 +91,9 @@ Estas decisiones están cerradas. El agente no las cuestiona, no sugiere alterna
 ### Regla de contraste (texto sobre video)
 Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ningún texto sin sombra, contorno o caja».
 - **Sombra activa por defecto** en Chispa, Revista, Titular y en las palabras de énfasis. **Sin sombra por defecto** en Claro y Foco (subtitulado simple).
-- **Contorno apagado por defecto**, con un check **Contorno** por estilo. Si sombra y contorno están activos, la sombra prevalece (interpretación pendiente, ver abajo).
+- **Contorno apagado por defecto** en los 5 estilos: por defecto solo hay sombra y el contorno no se dibuja.
+- El check **Contorno** se puede marcar en todos los estilos, incluidos Chispa, Revista y Titular (no está bloqueado). Encendido, se dibuja un **contorno fino detrás de la sombra** y la sombra sigue prevaleciendo visualmente.
+- En Claro y Foco, sin sombra por defecto, el check también enciende el contorno.
 - **No se fuerza contorno solo por contraste.** El contraste se verifica contra el fotograma real, no contra un fondo asumido, y el editor **avisa** antes de exportar cuando un texto no se lee.
 - **Amarillo plano sin sombra sobre fondo claro** siempre se marca como fallo de contraste.
 - Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra.
@@ -120,10 +122,9 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
   - sin gradientes, sin sombras en reposo, sin textos cortados ni desvanecidos, sin eyebrow.
 - **Selector de estilos:** la preview es el reproductor real. Arriba hay una barra de 5 segmentos que marca el estilo actual. Cada tarjeta muestra el fotograma real del clip con una frase real y el estilo aplicado, solo con el nombre. Abajo van el check **Contorno** y **Back** / **Next**, que recorren Chispa → Revista → Titular → Claro → Foco → sin estilo. Sin Surprise me, sin presets nuevos y sin selector de fuentes.
 
-### Pendiente de decisión del usuario
-1. **Interpretación de «la sombra prevalece»:** hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
-
-*Resuelto:* el nombre del antiguo check. El usuario decidió el botón dividido con el interruptor **Repeticiones**.
+### Decisiones resueltas por el usuario
+- **Nombre del antiguo check:** resuelto con el botón dividido y el interruptor **Repeticiones**.
+- **«La sombra prevalece»:** resuelto. Con el check Contorno encendido, el contorno fino se dibuja detrás de la sombra y la sombra sigue prevaleciendo visualmente.
 
 ---
 
