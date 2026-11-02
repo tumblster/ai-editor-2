@@ -9,7 +9,15 @@ import { buildCues } from '@/lib/cues'
 import { COPY } from '@/lib/copy'
 import { probeVideo, runFfmpeg } from '@/lib/ffmpeg'
 import { clientIp, rateLimit } from '@/lib/rateLimit'
-import { IMAGE_RE, UPLOADS_DIR, VIDEO_RE, fileExists, uploadsPath } from '@/lib/uploads'
+import {
+  IMAGE_RE,
+  VIDEO_RE,
+  exportDirPath,
+  fileExists,
+  removeExportDir,
+  sweepStaleExports,
+  uploadsPath,
+} from '@/lib/uploads'
 import { buildCutSegments, totalDuration } from '@/lib/timeline'
 import { STYLE_PRESETS } from '@/lib/styles/presets'
 import type { Layer, PhraseUnit, StylePresetId } from '@/types/project'
@@ -33,8 +41,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: COPY.rateLimited }, { status: 429 })
   }
 
-  const exportId = randomUUID().slice(0, 8)
+  const exportId = randomUUID().replace(/-/g, '').slice(0, 8)
   let exportDir = ''
+  let handedOff = false // la descarga se encarga de borrar la carpeta
+
+  // mantenimiento: carpetas viejas que quedaron por un corte del servidor
+  await sweepStaleExports()
 
   try {
     const body = (await req.json()) as ExportBody
@@ -75,7 +87,7 @@ export async function POST(req: Request) {
     }
     const totalTl = totalDuration(segments)
 
-    exportDir = `${UPLOADS_DIR}/export-${exportId}`
+    exportDir = exportDirPath(exportId)
     await mkdir(exportDir, { recursive: true })
 
     // ---- ASS ----
@@ -186,7 +198,22 @@ export async function POST(req: Request) {
 
     await runFfmpeg(args, exportDir)
 
-    const stream = Readable.toWeb(createReadStream(`${exportDir}/out.mp4`)) as ReadableStream<Uint8Array>
+    // La usuaria cerró o canceló mientras ffmpeg trabajaba: nadie leerá el archivo.
+    if (req.signal.aborted) {
+      await removeExportDir(exportDir)
+      return new Response(null, { status: 499 })
+    }
+
+    // La carpeta se borra cuando el archivo termina de enviarse o la descarga se
+    // cancela: 'close' llega en ambos casos, ya con el archivo cerrado.
+    const file = createReadStream(`${exportDir}/out.mp4`)
+    const dirToRemove = exportDir
+    file.once('close', () => {
+      void removeExportDir(dirToRemove)
+    })
+    req.signal.addEventListener('abort', () => file.destroy(), { once: true })
+    handedOff = true
+    const stream = Readable.toWeb(file) as ReadableStream<Uint8Array>
     return new Response(stream, {
       status: 200,
       headers: {
@@ -196,6 +223,7 @@ export async function POST(req: Request) {
     })
   } catch (err) {
     console.error('[export] error:', err instanceof Error ? err.message : err)
+    if (exportDir && !handedOff) await removeExportDir(exportDir)
     return NextResponse.json({ error: COPY.exportFail }, { status: 500 })
   }
 }

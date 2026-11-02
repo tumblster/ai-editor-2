@@ -13,6 +13,12 @@ next-env.d.ts
 # archivos de usuarias — videos, imágenes y estado del proyecto
 uploads/
 
+# exports generados y frames sacados de ellos — nunca en git
+export-*/
+testmedia/export-*.mp4
+testmedia/frame_*.png
+testmedia/tail*.png
+
 # secretos — nunca en el repo
 .env.local
 .env*.local
