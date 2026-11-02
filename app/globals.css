@@ -684,13 +684,11 @@ button:disabled {
 }
 .tl-videoname {
   position: absolute;
-  top: 2px;
-  font-size: 9.5px;
+  top: 0;
+  font: 500 12px Inter, 'Segoe UI', system-ui, sans-serif;
   color: var(--text-dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  padding-left: 3px;
+  padding: 0 8px;
 }
 .tl-track {
   position: relative;
@@ -701,10 +699,10 @@ button:disabled {
   position: sticky;
   left: 0;
   display: inline-block;
-  width: 46px;
-  font-size: 9.5px;
+  width: 56px;
+  font: 500 12px Inter, 'Segoe UI', system-ui, sans-serif;
   color: var(--text-dim);
-  padding: 2px 0 0 6px;
+  padding: 4px 0 0 8px;
   z-index: 3;
   background: var(--bg-elev);
   height: 100%;
@@ -738,10 +736,10 @@ button:disabled {
 }
 .tl-label {
   position: absolute;
-  left: 6px;
+  left: 8px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 10px;
+  font: 500 12px Inter, 'Segoe UI', system-ui, sans-serif;
   white-space: nowrap;
   pointer-events: none;
 }
@@ -889,18 +887,57 @@ button:disabled {
   background: transparent;
 }
 
-@media (max-width: 1100px) {
+/* ---- móvil y tablet (768 y 390): player fijo arriba, opciones con scroll, línea de tiempo plegable ---- */
+.only-compact {
+  display: none;
+}
+@media (max-width: 1023px) {
   .editor {
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'header'
-      'stage'
-      'left'
-      'right'
-      'timeline';
+    display: flex;
+    flex-direction: column;
     height: auto;
+    min-height: 100vh;
+    padding: 0 16px 16px;
+    gap: 16px;
   }
+  .editor-header {
+    order: 0;
+    padding-top: 16px;
+  }
+  /* fijo arriba, ancho completo, máximo 45% del alto; nunca pantalla completa */
   .editor-stage {
-    min-height: 70vh;
+    order: 1;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    margin: 0 -16px;
+    border-radius: 0;
+    border-width: 0 0 1px;
+    height: min(45svh, calc(100vw * var(--canvas-ratio, 1.7778) + 56px));
+    flex: none;
+  }
+  .editor-stage .player-col {
+    padding: 8px 16px;
+    gap: 8px;
+  }
+  .editor-left {
+    order: 2;
+    overflow: visible;
+  }
+  .editor-right {
+    order: 3;
+    overflow: visible;
+  }
+  .editor-timeline {
+    order: 4;
+  }
+  .only-compact {
+    display: inline-flex;
+  }
+  .editor-timeline.is-folded .timeline-body {
+    display: none;
+  }
+  .editor-timeline.is-folded .panel-head {
+    margin-bottom: 0;
   }
 }

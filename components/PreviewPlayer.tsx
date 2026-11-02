@@ -230,7 +230,9 @@ export default function PreviewPlayer({
     if (!el) return
     const update = () => {
       const k = Math.min(el.clientWidth / canvas.w, el.clientHeight / canvas.h)
-      setSize({ w: Math.floor(canvas.w * k), h: Math.floor(canvas.h * k) })
+      // el alto sale del ancho redondeado: mismo aspecto que el video, sin deformar
+      const w = Math.floor(canvas.w * k)
+      setSize({ w, h: Math.min(Math.round((w * canvas.h) / canvas.w), Math.floor(el.clientHeight)) })
     }
     update()
     const ro = new ResizeObserver(update)

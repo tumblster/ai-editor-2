@@ -42,6 +42,8 @@ export default function Page() {
   const [busy, setBusy] = useState<UploaderBusy | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
+  // en móvil la línea de tiempo se puede plegar (en escritorio siempre visible)
+  const [timelineFolded, setTimelineFolded] = useState(false)
   const closeToast = useCallback(() => setToast(null), [])
 
   const [history, dispatchHistory] = useReducer(historyReducer, {
@@ -357,7 +359,10 @@ export default function Page() {
         />
       </div>
 
-      <div className="editor-stage">
+      <div
+        className="editor-stage"
+        style={{ '--canvas-ratio': canvas.h / canvas.w } as React.CSSProperties}
+      >
         <PreviewPlayer
           canvas={canvas}
           videos={videos}
@@ -387,11 +392,21 @@ export default function Page() {
         </section>
       </div>
 
-      <div className="editor-timeline">
+      <div className={`editor-timeline ${timelineFolded ? 'is-folded' : ''}`}>
         <section className="panel">
           <div className="panel-head">
             <h2>Línea de tiempo</h2>
+            <button
+              type="button"
+              className="btn btn-mini only-compact"
+              aria-expanded={!timelineFolded}
+              aria-controls="timeline-body"
+              onClick={() => setTimelineFolded((f) => !f)}
+            >
+              {timelineFolded ? 'Desplegar' : 'Plegar'}
+            </button>
           </div>
+          <div id="timeline-body" className="timeline-body">
           <Timeline
             videos={videos}
             phrases={phrases}
@@ -404,6 +419,7 @@ export default function Page() {
             onAdjustUnit={adjustUnit}
             onImageTime={setImageTime}
           />
+          </div>
         </section>
       </div>
 
