@@ -19,7 +19,7 @@ const { buildCutSegments, totalDuration } = require(`${B}/timeline.js`)
 const { buildCues, activeCue } = require(`${B}/cues.js`)
 const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
-const { STYLE_PRESETS } = require(`${B}/styles/presets.js`)
+const { STYLE_PRESETS, resolveStyle } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
 const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
@@ -135,34 +135,52 @@ test('cues: sin solapes, con duración y activeCue semiabierto como libass', () 
   }
 })
 
-// ---- Contraste ----
-test('contraste: los 5 estilos se leen sobre fondo blanco, negro, claro y medio', () => {
-  for (const p of Object.values(STYLE_PRESETS)) {
-    for (const lum of [1, 0.9, 0.3, 0]) {
-      assert.strictEqual(failsContrast(p, lum), false, `${p.id} falla con luminancia ${lum}`)
-    }
+// ---- Sombra, contorno y contraste ----
+test('sombra y contorno: sombra por defecto en títulos y énfasis, contorno apagado, la sombra prevalece', () => {
+  const shadowed = ['chispa', 'revista', 'titular']
+  const simple = ['claro', 'foco']
+  for (const id of Object.keys(STYLE_PRESETS)) {
+    const p = resolveStyle(STYLE_PRESETS[id])
+    assert.strictEqual(p.base.outlineWidth, 0, `${id}: contorno debe estar apagado por defecto`)
+    if (shadowed.includes(id)) assert(p.base.shadowOffset > 0, `${id}: sombra por defecto`)
+    if (simple.includes(id)) assert.strictEqual(p.base.shadowOffset, 0, `${id}: subtitulado simple sin sombra`)
+    if (p.emphasis) assert(p.emphasis.shadowOffset > 0, `${id}: énfasis con sombra`)
+    const withOutline = resolveStyle(STYLE_PRESETS[id], { outline: true })
+    if (shadowed.includes(id)) assert.strictEqual(withOutline.base.outlineWidth, 0, `${id}: la sombra prevalece`)
+    if (simple.includes(id)) assert(withOutline.base.outlineWidth > 0, `${id}: contorno activable`)
   }
-  const flat = {
-    ...STYLE_PRESETS.claro,
-    base: { ...STYLE_PRESETS.claro.base, outlineWidth: 0, color: '#FFD84D' },
+})
+
+test('contraste: avisa contra el fondo real cuando el texto no tiene borde y no se lee', () => {
+  const claro = resolveStyle(STYLE_PRESETS.claro)
+  assert.strictEqual(failsContrast(claro, 0.95), true, 'Claro sin sombra ni contorno sobre fondo claro: avisar')
+  assert.strictEqual(failsContrast(claro, 0.02), false, 'Claro sobre fondo oscuro: se lee')
+  assert.strictEqual(failsContrast(resolveStyle(STYLE_PRESETS.claro, { outline: true }), 0.95), false, 'con contorno se lee')
+  for (const id of ['chispa', 'revista', 'titular']) {
+    for (const lum of [1, 0.9, 0.3, 0]) assert.strictEqual(failsContrast(resolveStyle(STYLE_PRESETS[id]), lum), false, `${id} ${lum}`)
   }
-  assert.strictEqual(failsContrast(flat, 0.9), true, 'amarillo plano sobre fondo claro debe marcarse')
+  const flatYellow = { ...claro, base: { ...claro.base, color: '#FFD84D' }, emphasis: null }
+  assert.strictEqual(failsContrast(flatYellow, 0.9), true, 'amarillo plano sin sombra sobre fondo claro: avisar')
 })
 
 // ---- Archivo ASS ----
-test('ASS: contorno opaco, banda visible, WrapStyle 1 y tiempos hacia abajo', () => {
+test('ASS: sombra/contorno según el estilo, banda visible, WrapStyle 1 y tiempos hacia abajo', () => {
   const total = totalDuration(segs)
+  const field = (ass, name) => ass.split('\n').find((l) => l.startsWith(`Style: ${name},`)).split(',')
+  // columnas del estilo: 5 OutlineColour, 16 Outline, 17 Shadow
   const foco = buildAss('foco', buildCues('foco', cut, segs), total)
-  const mainStyle = foco.split('\n').find((l) => l.startsWith('Style: Main'))
-  // contorno #0C0C10 al 90% de opacidad → transparencia 0x19
-  assert(mainStyle.includes('&H19100C0C'), mainStyle)
+  assert.deepStrictEqual(field(foco, 'Main').slice(16, 18), ['0', '0'], 'Foco por defecto sin contorno ni sombra')
+  const fm = field(buildAss('foco', buildCues('foco', cut, segs), total, undefined, { outline: true }), 'Main')
+  assert.strictEqual(fm[16], '2.5')
+  assert.strictEqual(fm[5], '&H19100C0C', 'contorno #0C0C10 al 90%')
+  const chispa = buildAss('chispa', buildCues('chispa', cut, segs), total, undefined, { outline: true })
+  assert.deepStrictEqual(field(chispa, 'Main').slice(16, 18), ['0', '5'], 'Chispa: la sombra prevalece sobre el contorno')
+  const claroOutline = buildAss('claro', buildCues('claro', cut, segs), total, undefined, { outline: true })
+  assert(/\\shad3\\4c&H000000&\\4a&H66&\\bord0/.test(claroOutline), 'énfasis con sombra y sin contorno')
   assert(foco.includes('WrapStyle: 1'))
   const rev = buildAss('revista', buildCues('revista', cut, segs), total)
-  const band = rev.split('\n').find((l) => l.startsWith('Style: Band'))
-  assert(/^Style: Band,Arial,64,&HDBFFFFFF,/.test(band), band)
-  // tiempos en centésimas redondeadas hacia abajo: 2.2667 s → 0:00:02.26
-  const lines = buildAss('claro', buildCues('claro', cut, segs), total).split('\n')
-  const dialogue = lines.filter((l) => l.startsWith('Dialogue:'))
+  assert(/^Style: Band,Arial,64,&HDBFFFFFF,/.test(field(rev, 'Band').join(',')))
+  const dialogue = buildAss('claro', buildCues('claro', cut, segs), total).split('\n').filter((l) => l.startsWith('Dialogue:'))
   assert(dialogue.length > 0)
   for (const d of dialogue) assert(/^Dialogue: \d,\d:\d\d:\d\d\.\d\d,\d:\d\d:\d\d\.\d\d,/.test(d), d)
   assert(dialogue.some((d) => d.includes(',0:00:02.26,')), 'frontera a 68 fotogramas debe ser 0:00:02.26')

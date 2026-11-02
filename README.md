@@ -32,7 +32,7 @@ Cubren:
 - lo que marca el autorrecorte (sin tocar el original),
 - los segmentos alineados a fotograma y recortados a la duración real del video,
 - los cues,
-- la regla de contraste,
+- sombra, contorno y el aviso de contraste,
 - el archivo ASS,
 - el rechazo rápido de imágenes corruptas,
 - el tiempo máximo de ffmpeg.

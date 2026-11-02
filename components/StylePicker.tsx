@@ -4,7 +4,7 @@
 // mismo clip de ejemplo, y botones Back y Next.
 
 import { CaptionRender, StyleThumb, EXAMPLE_WORDS } from './CaptionRender'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, STYLE_IDS } from '@/lib/styles/presets'
+import { DESIGN_H, DESIGN_W, STYLE_PRESETS, STYLE_IDS, resolveStyle } from '@/lib/styles/presets'
 import { markEmph } from '@/lib/cues'
 import type { Cue } from '@/lib/cues'
 import type { StylePresetId } from '@/types/project'
@@ -12,6 +12,8 @@ import type { StylePresetId } from '@/types/project'
 interface Props {
   styleId: StylePresetId | null
   onSelect: (id: StylePresetId | null) => void
+  outline: boolean
+  onOutline: (on: boolean) => void
   contrastIssue: boolean
 }
 
@@ -29,7 +31,7 @@ function exampleCue(id: StylePresetId): Cue {
   }
 }
 
-export default function StylePicker({ styleId, onSelect, contrastIssue }: Props) {
+export default function StylePicker({ styleId, onSelect, outline, onOutline, contrastIssue }: Props) {
   const ids = STYLE_IDS
   const currentIdx = styleId ? ids.indexOf(styleId) : -1
 
@@ -58,7 +60,7 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
               if (el) el.style.transform = `scale(${(el.parentElement?.clientWidth || 120) / DESIGN_W})`
             }}
           >
-            {preset && <StylePreviewInner presetId={preset.id} />}
+            {preset && <StylePreviewInner presetId={preset.id} outline={outline} />}
           </div>
         </div>
       </div>
@@ -84,6 +86,15 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
         <button type="button" className="btn btn-ghost" onClick={() => step(1)}>
           Next
         </button>
+        <label className="check style-outline">
+          <input
+            type="checkbox"
+            checked={outline}
+            disabled={!styleId}
+            onChange={(e) => onOutline(e.target.checked)}
+          />
+          <span>Contorno</span>
+        </label>
         {contrastIssue && (
           <span className="contrast-warn" title="Revisa el contraste del texto contra el video">
             ⚠
@@ -94,6 +105,6 @@ export default function StylePicker({ styleId, onSelect, contrastIssue }: Props)
   )
 }
 
-function StylePreviewInner({ presetId }: { presetId: StylePresetId }) {
-  return <CaptionRender preset={STYLE_PRESETS[presetId]} cue={exampleCue(presetId)} />
+function StylePreviewInner({ presetId, outline }: { presetId: StylePresetId; outline: boolean }) {
+  return <CaptionRender preset={resolveStyle(STYLE_PRESETS[presetId], { outline })} cue={exampleCue(presetId)} />
 }

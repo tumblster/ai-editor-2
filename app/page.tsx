@@ -19,7 +19,7 @@ import { activeCue, buildCues } from '@/lib/cues'
 import { failsContrast, sampleZoneLuminance, zoneFor } from '@/lib/contrast'
 import { historyReducer } from '@/lib/history'
 import { buildPhrases } from '@/lib/phrases'
-import { STYLE_PRESETS } from '@/lib/styles/presets'
+import { STYLE_PRESETS, resolveStyle } from '@/lib/styles/presets'
 import { usePlayback } from '@/lib/usePlayback'
 import { buildCutSegments } from '@/lib/timeline'
 import { canvasFor } from '@/lib/canvas'
@@ -64,7 +64,12 @@ export default function Page() {
     () => (edit.styleId ? buildCues(edit.styleId, phrases, segments) : []),
     [edit.styleId, phrases, segments]
   )
-  const preset = edit.styleId ? STYLE_PRESETS[edit.styleId] : null
+  const outlineOn = edit.styleId ? !!edit.outlines?.[edit.styleId] : false
+  // estilo tal como se dibuja (con el contorno opcional) — el export aplica lo mismo
+  const preset = useMemo(
+    () => (edit.styleId ? resolveStyle(STYLE_PRESETS[edit.styleId], { outline: outlineOn }) : null),
+    [edit.styleId, outlineOn]
+  )
   // aspecto del proyecto = el del primer video (el export usa la misma regla)
   const canvas = useMemo(() => canvasFor(videos[0]?.width, videos[0]?.height), [videos])
 
@@ -83,7 +88,7 @@ export default function Page() {
         setImages(snap.images ?? [])
         dispatchHistory({
           type: 'reset',
-          doc: { phrases: snap.edit.phrases, imageLayers: snap.edit.imageLayers, styleId: snap.edit.styleId },
+          doc: { ...snap.edit, phrases: snap.edit.phrases, imageLayers: snap.edit.imageLayers ?? [], styleId: snap.edit.styleId ?? null },
         })
         setScreen('editor')
       } catch {
@@ -108,11 +113,11 @@ export default function Page() {
           version: 1 as const,
           videos,
           images,
-          edit: { phrases, imageLayers: edit.imageLayers, styleId: edit.styleId },
+          edit,
         }),
       }).catch(() => {})
     }, 800)
-  }, [screen, videos, images, phrases, edit.imageLayers, edit.styleId])
+  }, [screen, videos, images, edit])
 
   // ---- flujo de subida ----
   const confirmFiles = async (files: File[]) => {
@@ -178,7 +183,7 @@ export default function Page() {
 
       setVideos((prev) => [...prev, ...newVideos])
       setImages((prev) => [...prev, ...newImages])
-      setEdit({ phrases: [...phrases, ...newPhrases], imageLayers: [...baseLayers, ...newLayers], styleId: edit.styleId })
+      setEdit({ ...edit, phrases: [...phrases, ...newPhrases], imageLayers: [...baseLayers, ...newLayers] })
       setBusy(null)
       setScreen('editor')
     } catch {
@@ -307,6 +312,10 @@ export default function Page() {
           <StylePicker
             styleId={edit.styleId}
             onSelect={(id: StylePresetId | null) => setEdit({ ...edit, styleId: id })}
+            outline={outlineOn}
+            onOutline={(on) =>
+              edit.styleId && setEdit({ ...edit, outlines: { ...edit.outlines, [edit.styleId]: on } })
+            }
             contrastIssue={contrastIssue}
           />
         </section>
@@ -326,6 +335,7 @@ export default function Page() {
           phrases={phrases}
           imageLayers={edit.imageLayers}
           styleId={edit.styleId}
+          outline={outlineOn}
         />
       </div>
 

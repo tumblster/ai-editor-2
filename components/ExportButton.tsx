@@ -13,9 +13,10 @@ interface Props {
   phrases: PhraseUnit[]
   imageLayers: Layer[]
   styleId: StylePresetId | null
+  outline: boolean
 }
 
-export default function ExportButton({ disabled, videos, phrases, imageLayers, styleId }: Props) {
+export default function ExportButton({ disabled, videos, phrases, imageLayers, styleId, outline }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -27,7 +28,7 @@ export default function ExportButton({ disabled, videos, phrases, imageLayers, s
       const res = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videos, phrases, imageLayers, styleId }),
+        body: JSON.stringify({ videos, phrases, imageLayers, styleId, outline }),
       })
       if (!res.ok) {
         const data = (await res.json().catch(() => null)) as { error?: string } | null

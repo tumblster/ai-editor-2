@@ -99,6 +99,8 @@ export interface EditDoc {
   phrases: PhraseUnit[]
   imageLayers: Layer[]
   styleId: StylePresetId | null
+  // contorno opcional por estilo (apagado por defecto)
+  outlines?: Partial<Record<StylePresetId, boolean>>
 }
 
 export interface ProjectState {

@@ -35,6 +35,7 @@ interface ExportBody {
   phrases?: PhraseUnit[]
   imageLayers?: Layer[]
   styleId?: StylePresetId | null
+  outline?: boolean
 }
 
 export async function POST(req: Request) {
@@ -100,7 +101,7 @@ export async function POST(req: Request) {
     let hasAss = false
     if (styleId) {
       const cues = buildCues(styleId, phrases, segments)
-      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl, canvas), 'utf-8')
+      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl, canvas, { outline: body.outline === true }), 'utf-8')
       hasAss = true
     }
 

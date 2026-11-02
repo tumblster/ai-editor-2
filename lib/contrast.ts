@@ -1,7 +1,8 @@
 // Regla de contraste verificada contra el fotograma real (solo cliente).
 // Se muestrea la zona del video donde cae el texto y se comprueba que cada color
 // de texto del estilo se lea: o contrasta por sí solo con el fondo, o lleva un
-// borde oscuro suficiente (contorno o caja) y contrasta con ese borde.
+// borde oscuro (sombra o contorno) y contrasta con ese borde. No se fuerza
+// contorno: si falla, se avisa en el selector de estilo antes de exportar.
 
 import { containFit, type Canvas } from './canvas'
 import type { StylePreset } from './styles/presets'
@@ -78,23 +79,35 @@ export function sampleZoneLuminance(
   }
 }
 
-/** true si algún color de texto del estilo no se lee sobre ese fondo. */
+/** true si algún color de texto del estilo (ya resuelto con sus opciones) no se lee sobre ese fondo. */
 export function failsContrast(preset: StylePreset, bgLum: number): boolean {
   const { base, emphasis } = preset
-  const check = (color: string, edgeWidth: number, edgeAlpha: number, edgeColor: string) => {
+  const readable = (color: string, edge: { outline: number; outlineAlpha: number; outlineColor: string; shadow: number; shadowAlpha: number }) => {
     const fill = hexLum(color)
     if (ratio(fill, bgLum) >= 3) return true
-    // borde oscuro: contorno de al menos 2 px y 60% de opacidad
-    const strongEdge = edgeWidth >= 2 && edgeAlpha >= 0.6
-    return strongEdge && ratio(fill, hexLum(edgeColor)) >= 4.5
+    // borde oscuro: contorno de al menos 2 px al 60%, o sombra de al menos 2 px al 45%
+    const hasOutline = edge.outline >= 2 && edge.outlineAlpha >= 0.6
+    const hasShadow = edge.shadow >= 2 && edge.shadowAlpha >= 0.45
+    const edgeLum = hasOutline ? hexLum(edge.outlineColor) : 0
+    return (hasOutline || hasShadow) && ratio(fill, edgeLum) >= 4.5
   }
-  const baseOk = check(base.color, base.outlineWidth, base.outlineAlpha, base.outlineColor)
+  const baseOk = readable(base.color, {
+    outline: base.outlineWidth,
+    outlineAlpha: base.outlineAlpha,
+    outlineColor: base.outlineColor,
+    shadow: base.shadowOffset,
+    shadowAlpha: base.shadowAlpha,
+  })
   if (!baseOk) return true
   if (emphasis) {
-    const w = emphasis.outlineWidth ?? base.outlineWidth
-    const a = emphasis.outlineWidth ? emphasis.outlineAlpha ?? 0.8 : base.outlineAlpha
-    const c = emphasis.outlineWidth ? '#000000' : base.outlineColor
-    if (!check(emphasis.color, w, a, c)) return true
+    const emphOk = readable(emphasis.color, {
+      outline: 0,
+      outlineAlpha: 0,
+      outlineColor: '#000000',
+      shadow: emphasis.shadowOffset,
+      shadowAlpha: emphasis.shadowAlpha,
+    })
+    if (!emphOk) return true
   }
   return false
 }

@@ -536,6 +536,10 @@ button:disabled {
   align-items: center;
   gap: 8px;
 }
+.style-outline {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
 .style-nav .btn {
   flex: 1;
   padding: 6px 12px;

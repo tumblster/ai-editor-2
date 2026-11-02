@@ -4,7 +4,14 @@
 import type { StylePresetId } from '@/types/project'
 import type { Cue } from './cues'
 import { DEFAULT_CANVAS, type Canvas } from './canvas'
-import { STYLE_PRESETS, assFontSize, type TextStyle } from './styles/presets'
+import {
+  STYLE_PRESETS,
+  assFontSize,
+  resolveStyle,
+  type EmphasisSpec,
+  type StyleOptions,
+  type TextStyle,
+} from './styles/presets'
 
 /**
  * Tiempo ASS (centésimas). Se redondea hacia abajo: los bordes de los cues caen
@@ -82,7 +89,7 @@ function escapeAss(text: string): string {
   return text.replace(/[{}\\]/g, '').replace(/\r?\n/g, ' ').trim()
 }
 
-function cueText(cue: Cue, base: TextStyle, emph: NonNullable<typeof STYLE_PRESETS['chispa']['emphasis']>): string {
+function cueText(cue: Cue, base: TextStyle, emph: EmphasisSpec): string {
   const parts: string[] = []
   for (const w of cue.words) {
     let text = escapeAss(w.text)
@@ -95,10 +102,12 @@ function cueText(cue: Cue, base: TextStyle, emph: NonNullable<typeof STYLE_PRESE
       }
       if (emph.font) tags.push(`\\fn${emph.font}`)
       if (emph.italic) tags.push('\\i1')
-      if (emph.outlineWidth) {
-        tags.push(`\\bord${emph.outlineWidth}`)
-        tags.push(`\\3c${assBgr('#000000')}`)
-        tags.push(`\\3a${assAlpha(1 - (emph.outlineAlpha ?? 0.8))}`)
+      // las palabras de énfasis llevan sombra; donde hay sombra no va contorno
+      if (emph.shadowOffset > 0) {
+        tags.push(`\\shad${emph.shadowOffset}`)
+        tags.push(`\\4c${assBgr('#000000')}`)
+        tags.push(`\\4a${assAlpha(1 - emph.shadowAlpha)}`)
+        if (base.outlineWidth > 0) tags.push('\\bord0')
       }
       if (emph.uppercase) text = text.toUpperCase()
       parts.push(`{${tags.join('')}}${text}{\\r}`)
@@ -113,11 +122,12 @@ export function buildAss(
   styleId: StylePresetId,
   cues: Cue[],
   totalDuration: number,
-  canvas: Canvas = DEFAULT_CANVAS
+  canvas: Canvas = DEFAULT_CANVAS,
+  options: StyleOptions = {}
 ): string {
   const DESIGN_W = canvas.w
   const DESIGN_H = canvas.h
-  const preset = STYLE_PRESETS[styleId]
+  const preset = resolveStyle(STYLE_PRESETS[styleId], options)
   const header = [
     '[Script Info]',
     '; Generado por el editor — Fase 1',

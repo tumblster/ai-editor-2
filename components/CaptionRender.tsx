@@ -51,9 +51,10 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
     if (emphasis.italic) css.fontStyle = 'italic'
     if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
     if (emphasis.uppercase) css.textTransform = 'uppercase'
-    if (emphasis.outlineWidth) {
-      css.WebkitTextStroke = `${emphasis.outlineWidth * 2}px rgba(0,0,0,${emphasis.outlineAlpha ?? 0.8})`
-      css.paintOrder = 'stroke fill'
+    // las palabras de énfasis llevan sombra; donde hay sombra no va contorno
+    if (emphasis.shadowOffset > 0) {
+      css.textShadow = `${emphasis.shadowOffset}px ${emphasis.shadowOffset}px 0 rgba(0,0,0,${emphasis.shadowAlpha})`
+      if (base.outlineWidth > 0) css.WebkitTextStroke = '0px transparent'
     }
     return (
       <span key={i} style={css}>
