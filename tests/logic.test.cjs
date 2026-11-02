@@ -21,7 +21,8 @@ const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
 const { STYLE_PRESETS } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
-const { probeImage, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
+const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
+const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
 
 const tr1 = require(`${R}/testmedia/tr1.json`).transcription
 const tr2 = require(`${R}/testmedia/tr2.json`).transcription
@@ -165,6 +166,36 @@ test('ASS: contorno opaco, banda visible, WrapStyle 1 y tiempos hacia abajo', ()
   assert(dialogue.length > 0)
   for (const d of dialogue) assert(/^Dialogue: \d,\d:\d\d:\d\d\.\d\d,\d:\d\d:\d\d\.\d\d,/.test(d), d)
   assert(dialogue.some((d) => d.includes(',0:00:02.26,')), 'frontera a 68 fotogramas debe ser 0:00:02.26')
+})
+
+// ---- Aspecto del video ----
+test('lienzo: respeta el aspecto del video, lado corto 1080 y medidas pares', () => {
+  assert.deepStrictEqual(canvasFor(720, 1280), { w: 1080, h: 1920 }) // 9:16
+  assert.deepStrictEqual(canvasFor(1920, 1080), { w: 1920, h: 1080 }) // 16:9
+  assert.deepStrictEqual(canvasFor(1080, 1080), { w: 1080, h: 1080 }) // 1:1
+  assert.deepStrictEqual(canvasFor(1080, 1350), { w: 1080, h: 1350 }) // 4:5
+  const odd = canvasFor(853, 480)
+  assert(odd.w % 2 === 0 && odd.h === 1080 && Math.abs(odd.w / odd.h - 853 / 480) < 0.01, JSON.stringify(odd))
+  assert.deepStrictEqual(canvasFor(0, 0), DEFAULT_CANVAS)
+  const ass = buildAss('claro', [], 1, { w: 1920, h: 1080 })
+  assert(ass.includes('PlayResX: 1920') && ass.includes('PlayResY: 1080'))
+})
+
+test('lienzo: un video de móvil rotado 90° se lee vertical', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ai-editor-rot-'))
+  try {
+    const land = join(dir, 'land.mp4')
+    const rot = join(dir, 'rot.mp4')
+    await runFfmpeg(['-v', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=s=320x180:r=30:d=0.5', '-pix_fmt', 'yuv420p', land])
+    await runFfmpeg(['-v', 'error', '-y', '-display_rotation', '90', '-i', land, '-c', 'copy', rot])
+    const a = await probeVideo(land)
+    const b = await probeVideo(rot)
+    assert.deepStrictEqual([a.width, a.height], [320, 180])
+    assert.deepStrictEqual([b.width, b.height], [180, 320], 'rotado debe leerse 180x320')
+    assert.deepStrictEqual(canvasFor(b.width, b.height), { w: 1080, h: 1920 })
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
 })
 
 // ---- Imágenes de apoyo y tiempo máximo de ffmpeg (usan ffmpeg/ffprobe del sistema) ----

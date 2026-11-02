@@ -1,18 +1,21 @@
 'use client'
 
-// Reproductor vertical 9:16. La superposición de estilo y de imágenes vive en un
-// lienzo 1080x1920 escalado — la misma escala y posición que usa el export.
+// Reproductor con el aspecto del video subido (9:16 en reels verticales). La
+// superposición de estilo e imágenes vive en un lienzo del mismo tamaño que el
+// MP4 (lado corto 1080 px), escalado — la misma escala y posición que el export.
 
 import { useEffect, useRef, useState } from 'react'
 
 import { CaptionRender } from './CaptionRender'
 import { activeCue, type Cue } from '@/lib/cues'
+import type { Canvas } from '@/lib/canvas'
 import type { StylePreset } from '@/lib/styles/presets'
 import type { Playback } from '@/lib/usePlayback'
 import { formatTime } from '@/lib/timeline'
 import type { ImageAsset, Layer, VideoAsset } from '@/types/project'
 
 interface Props {
+  canvas: Canvas
   videos: VideoAsset[]
   images: ImageAsset[]
   imageLayers: Layer[]
@@ -52,11 +55,13 @@ function ImageBlock({
   layer,
   url,
   scale,
+  canvas,
   onPatch,
 }: {
   layer: Layer
   url: string
   scale: number
+  canvas: Canvas
   onPatch: (layerId: string, patch: Partial<Layer>) => void
 }) {
   const [live, setLive] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -95,8 +100,8 @@ function ImageBlock({
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d) return
-    const dxPct = ((e.clientX - d.px) / (1080 * scale)) * 100
-    const dyPct = ((e.clientY - d.py) / (1920 * scale)) * 100
+    const dxPct = ((e.clientX - d.px) / (canvas.w * scale)) * 100
+    const dyPct = ((e.clientY - d.py) / (canvas.h * scale)) * 100
     if (d.mode === 'move') {
       setLive({
         x: Math.min(Math.max(d.x + dxPct, d.w / 2), 100 - d.w / 2),
@@ -145,6 +150,7 @@ function ImageBlock({
 }
 
 export default function PreviewPlayer({
+  canvas,
   videos,
   images,
   imageLayers,
@@ -153,19 +159,24 @@ export default function PreviewPlayer({
   playback,
   onImagePatch,
 }: Props) {
-  const fieldRef = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLSpanElement>(null)
-  const [scale, setScale] = useState(0.2)
+  // tamaño en pantalla del reproductor: el mayor que cabe con el aspecto del lienzo
+  const [size, setSize] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
-    const el = fieldRef.current
+    const el = boxRef.current
     if (!el) return
-    const update = () => setScale(el.clientWidth / 1080)
+    const update = () => {
+      const k = Math.min(el.clientWidth / canvas.w, el.clientHeight / canvas.h)
+      setSize({ w: Math.floor(canvas.w * k), h: Math.floor(canvas.h * k) })
+    }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [canvas.w, canvas.h])
+  const scale = size.w ? size.w / canvas.w : 0.2
 
   useEffect(() => {
     return playback.subscribe((t) => {
@@ -179,9 +190,10 @@ export default function PreviewPlayer({
 
   return (
     <div className="player-col">
+      <div ref={boxRef} className="playfield-box">
       <div
-        ref={fieldRef}
         className="playfield"
+        style={{ width: size.w, height: size.h }}
         onClick={(e) => {
           if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'VIDEO') {
             playback.toggle()
@@ -200,7 +212,11 @@ export default function PreviewPlayer({
         ))}
         <div
           className="overlay-canvas"
-          style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
+          style={{
+            width: canvas.w,
+            height: canvas.h,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+          }}
         >
           {imageLayers
             .filter((l) => l.enabled !== false)
@@ -208,12 +224,13 @@ export default function PreviewPlayer({
               const url = l.src ? urlBySrc.get(l.src) : undefined
               if (!url) return null
               return (
-                <ImageBlock key={l.id} layer={l} url={url} scale={scale} onPatch={onImagePatch} />
+                <ImageBlock key={l.id} layer={l} url={url} scale={scale} canvas={canvas} onPatch={onImagePatch} />
               )
             })}
           {/* el texto va encima de las imágenes, igual que en el export */}
           {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
         </div>
+      </div>
       </div>
 
       <div className="player-controls">

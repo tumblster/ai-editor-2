@@ -28,6 +28,7 @@ const files = [
   'lib/assBuilder.ts',
   'lib/styles/presets.ts',
   'lib/ffmpeg.ts',
+  'lib/canvas.ts',
   'types/project.ts',
 ]
 

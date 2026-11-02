@@ -3,7 +3,8 @@
 // de texto del estilo se lea: o contrasta por sí solo con el fondo, o lleva un
 // borde oscuro suficiente (contorno o caja) y contrasta con ese borde.
 
-import { DESIGN_H, DESIGN_W, type StylePreset } from './styles/presets'
+import { containFit, type Canvas } from './canvas'
+import type { StylePreset } from './styles/presets'
 
 function channel(c: number): number {
   const s = c / 255
@@ -24,7 +25,7 @@ function ratio(a: number, b: number): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** Zona del texto en % del lienzo 1080x1920: [x0, y0, x1, y1]. */
+/** Zona del texto en % del lienzo: [x0, y0, x1, y1]. */
 function textZone(preset: StylePreset, side: 'left' | 'right'): [number, number, number, number] {
   const p = preset.placement
   if (p.kind === 'blocks') {
@@ -42,17 +43,16 @@ function textZone(preset: StylePreset, side: 'left' | 'right'): [number, number,
 export function sampleZoneLuminance(
   video: HTMLVideoElement,
   zone: [number, number, number, number],
+  frame: Canvas,
   canvas: HTMLCanvasElement
 ): number | null {
   const vw = video.videoWidth
   const vh = video.videoHeight
   if (!vw || !vh || video.readyState < 2) return null
-  const s = Math.min(DESIGN_W / vw, DESIGN_H / vh)
-  const ox = (DESIGN_W - vw * s) / 2
-  const oy = (DESIGN_H - vh * s) / 2
+  const { s, ox, oy } = containFit(frame, vw, vh)
   const toSrc = (pctX: number, pctY: number) => ({
-    x: Math.min(Math.max(((pctX / 100) * DESIGN_W - ox) / s, 0), vw),
-    y: Math.min(Math.max(((pctY / 100) * DESIGN_H - oy) / s, 0), vh),
+    x: Math.min(Math.max(((pctX / 100) * frame.w - ox) / s, 0), vw),
+    y: Math.min(Math.max(((pctY / 100) * frame.h - oy) / s, 0), vh),
   })
   const a = toSrc(zone[0], zone[1])
   const b = toSrc(zone[2], zone[3])

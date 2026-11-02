@@ -20,6 +20,7 @@ import {
 } from '@/lib/uploads'
 import { buildCutSegments, totalDuration } from '@/lib/timeline'
 import { STYLE_PRESETS } from '@/lib/styles/presets'
+import { canvasFor } from '@/lib/canvas'
 import type { Layer, PhraseUnit, StylePresetId } from '@/types/project'
 
 export const runtime = 'nodejs'
@@ -87,6 +88,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: COPY.exportFail }, { status: 400 })
     }
     const totalTl = totalDuration(segments)
+    // Lienzo con el aspecto del primer video (sin deformar ni recortar).
+    // Los demás videos se encajan dentro con margen si tienen otro aspecto.
+    const canvas = canvasFor(probes[0].width, probes[0].height)
+    const { w: W, h: H } = canvas
 
     exportDir = exportDirPath(exportId)
     await mkdir(exportDir, { recursive: true })
@@ -95,7 +100,7 @@ export async function POST(req: Request) {
     let hasAss = false
     if (styleId) {
       const cues = buildCues(styleId, phrases, segments)
-      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl), 'utf-8')
+      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl, canvas), 'utf-8')
       hasAss = true
     }
 
@@ -147,7 +152,12 @@ export async function POST(req: Request) {
       for (let k = 0; k < segs.length; k++) {
         const s = segs[k]
         const vStart = s.srcStart > 0 ? s.srcStart - half : 0
-        parts.push(`[${vi}:v]trim=start=${f6(vStart)}:end=${f6(s.srcEnd - half)},setpts=PTS-STARTPTS[v${vi}_${k}]`)
+        // encaje por segmento: concat necesita el mismo tamaño en todos
+        parts.push(
+          `[${vi}:v]trim=start=${f6(vStart)}:end=${f6(s.srcEnd - half)},setpts=PTS-STARTPTS,` +
+            `scale=${W}:${H}:force_original_aspect_ratio=decrease:force_divisible_by=2,` +
+            `pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1[v${vi}_${k}]`
+        )
         if (hasAudio) {
           parts.push(
             `[${vi}:a]atrim=start=${f6(s.srcStart)}:end=${f6(s.srcEnd)},asetpts=PTS-STARTPTS,aresample=48000,aformat=channel_layouts=stereo[a${vi}_${k}]`
@@ -164,7 +174,7 @@ export async function POST(req: Request) {
 
     parts.push(
       `${concatParts.join('')}concat=n=${segCount}:v=1:a=1[catv][cata]`,
-      `[catv]fps=30,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,setsar=1[base]`,
+      `[catv]fps=30[base]`,
       `[cata]aformat=sample_fmts=fltp:channel_layouts=stereo[aud]`
     )
 
@@ -173,10 +183,10 @@ export async function POST(req: Request) {
       const { layer, path } = activeImages[j]
       const wPct = clamp(layer.width ?? 40, 2, 100)
       const hPct = clamp(layer.height ?? 21, 2, 100)
-      const wPx = Math.round((1080 * wPct) / 100)
-      const hPx = Math.round((1920 * hPct) / 100)
-      const xPx = Math.round(clamp(((layer.x ?? 50) / 100) * 1080 - wPx / 2, 0, 1080 - wPx))
-      const yPx = Math.round(clamp(((layer.y ?? 78) / 100) * 1920 - hPx / 2, 0, 1920 - hPx))
+      const wPx = Math.round((W * wPct) / 100)
+      const hPx = Math.round((H * hPct) / 100)
+      const xPx = Math.round(clamp(((layer.x ?? 50) / 100) * W - wPx / 2, 0, W - wPx))
+      const yPx = Math.round(clamp(((layer.y ?? 78) / 100) * H - hPx / 2, 0, H - hPx))
       const start = clamp(layer.start ?? 0, 0, totalTl)
       const end = clamp(layer.end ?? Math.min(3, totalTl), start + 0.1, totalTl)
       const ii = inputIdx++

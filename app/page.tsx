@@ -22,6 +22,7 @@ import { buildPhrases } from '@/lib/phrases'
 import { STYLE_PRESETS } from '@/lib/styles/presets'
 import { usePlayback } from '@/lib/usePlayback'
 import { buildCutSegments } from '@/lib/timeline'
+import { canvasFor } from '@/lib/canvas'
 import type { EditDoc } from '@/types/project'
 import type { ImageAsset, Layer, PhraseUnit, StylePresetId, VideoAsset } from '@/types/project'
 
@@ -64,6 +65,8 @@ export default function Page() {
     [edit.styleId, phrases, segments]
   )
   const preset = edit.styleId ? STYLE_PRESETS[edit.styleId] : null
+  // aspecto del proyecto = el del primer video (el export usa la misma regla)
+  const canvas = useMemo(() => canvasFor(videos[0]?.width, videos[0]?.height), [videos])
 
   // ---- restore de project.json al abrir ----
   useEffect(() => {
@@ -241,7 +244,7 @@ export default function Page() {
       setContrastIssue(false)
       return
     }
-    const canvas = document.createElement('canvas')
+    const sampler = document.createElement('canvas')
     let last = 0
     return playback.subscribe((t) => {
       const now = performance.now()
@@ -250,10 +253,10 @@ export default function Page() {
       const cue = activeCue(cues, t)
       const el = playback.activeVideoElement()
       if (!cue || !el) return
-      const lum = sampleZoneLuminance(el, zoneFor(preset, cue.side), canvas)
+      const lum = sampleZoneLuminance(el, zoneFor(preset, cue.side), canvas, sampler)
       if (lum !== null) setContrastIssue(failsContrast(preset, lum))
     })
-  }, [preset, cues, playback])
+  }, [preset, cues, playback, canvas])
 
   const canExport = videos.length > 0 && segments.length > 0
 
@@ -328,6 +331,7 @@ export default function Page() {
 
       <div className="editor-stage">
         <PreviewPlayer
+          canvas={canvas}
           videos={videos}
           images={images}
           imageLayers={edit.imageLayers}

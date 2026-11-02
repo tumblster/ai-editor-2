@@ -30,6 +30,8 @@ interface FfprobeStream {
   width?: number
   height?: number
   duration?: string
+  tags?: { rotate?: string }
+  side_data_list?: { rotation?: number }[]
   avg_frame_rate?: string
   r_frame_rate?: string
 }
@@ -42,7 +44,7 @@ function parseRate(rate?: string): number {
 }
 
 /**
- * Sondea el video: dimensiones, duración y si tiene pista de audio.
+ * Sondea el video: dimensiones (como se ven, ya giradas), duración y si tiene pista de audio.
  * La duración es la de la pista de video (lo que el export puede mostrar):
  * el contenedor puede declarar más si el audio es más largo, y Whisper puede
  * devolver palabras que terminan después del último fotograma.
@@ -53,7 +55,8 @@ export function probeVideo(filePath: string): Promise<ProbeResult> {
       'ffprobe',
       [
         '-v', 'error',
-        '-show_entries', 'stream=codec_type,width,height,duration,avg_frame_rate,r_frame_rate',
+        '-show_entries',
+        'stream=codec_type,width,height,duration,avg_frame_rate,r_frame_rate:stream_tags=rotate:stream_side_data=rotation',
         '-show_entries', 'format=duration',
         '-of', 'json',
         filePath,
@@ -76,9 +79,18 @@ export function probeVideo(filePath: string): Promise<ProbeResult> {
         const video = (json.streams ?? []).find((s) => s.codec_type === 'video')
         const formatDur = parseFloat(json.format?.duration ?? '0') || 0
         const videoDur = parseFloat(video?.duration ?? '0') || 0
+        // Videos de móvil: vienen codificados en horizontal con una rotación de
+        // 90°. ffmpeg y el navegador los giran al reproducir, así que el ancho y
+        // el alto que importan son los girados.
+        const rotation = Math.abs(
+          Number(video?.side_data_list?.find((d) => d.rotation !== undefined)?.rotation ?? video?.tags?.rotate ?? 0)
+        )
+        const turned = Math.round(rotation / 90) % 2 === 1
+        const w = video?.width ?? 1080
+        const h = video?.height ?? 1920
         resolve({
-          width: video?.width ?? 1080,
-          height: video?.height ?? 1920,
+          width: turned ? h : w,
+          height: turned ? w : h,
           duration: videoDur > 0 ? (formatDur > 0 ? Math.min(videoDur, formatDur) : videoDur) : formatDur,
           fps: parseRate(video?.avg_frame_rate) || parseRate(video?.r_frame_rate) || 30,
           hasAudio: (json.streams ?? []).some((s) => s.codec_type === 'audio'),

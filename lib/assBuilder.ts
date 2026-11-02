@@ -3,7 +3,8 @@
 
 import type { StylePresetId } from '@/types/project'
 import type { Cue } from './cues'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, assFontSize, type TextStyle } from './styles/presets'
+import { DEFAULT_CANVAS, type Canvas } from './canvas'
+import { STYLE_PRESETS, assFontSize, type TextStyle } from './styles/presets'
 
 /**
  * Tiempo ASS (centésimas). Se redondea hacia abajo: los bordes de los cues caen
@@ -108,7 +109,14 @@ function cueText(cue: Cue, base: TextStyle, emph: NonNullable<typeof STYLE_PRESE
   return parts.join(' ')
 }
 
-export function buildAss(styleId: StylePresetId, cues: Cue[], totalDuration: number): string {
+export function buildAss(
+  styleId: StylePresetId,
+  cues: Cue[],
+  totalDuration: number,
+  canvas: Canvas = DEFAULT_CANVAS
+): string {
+  const DESIGN_W = canvas.w
+  const DESIGN_H = canvas.h
   const preset = STYLE_PRESETS[styleId]
   const header = [
     '[Script Info]',
