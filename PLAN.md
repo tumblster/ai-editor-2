@@ -12,7 +12,7 @@ Una pantalla web (`app/page.tsx`, ruta raíz) que permite:
 2. **Enviar cada video a Groq Whisper** (`whisper-large-v3-turbo`) desde el servidor — nunca desde el navegador
 3. **Recibir la transcripción** con tiempos por palabra y por segmento (`verbose_json`), un `transcription.json` por video
 4. **Mostrar la transcripción de todos los videos en orden**, agrupada en frases de 3 a 5 palabras máximo, sincronizadas con el video; cada frase es una unidad que se puede quitar o restaurar, y si una frase hablada es más larga se parte por palabras, nunca a mitad de palabra
-5. **Aplicar un autorrecorte** (silencios, muletillas, retakes) — sin modal de confirmación; lo que lo hace seguro es poder deshacer, rehacer y restaurar después
+5. **Aplicar un autorrecorte** (silencios, muletillas, repeticiones) — sin modal de confirmación; lo que lo hace seguro es poder deshacer, rehacer y restaurar después
 6. **Editar en una línea de tiempo fluida (60 fps)** con pistas de video, texto e imagen, cortes manuales, ajuste de bordes arrastrando, deshacer y rehacer
 7. **Colocar las imágenes propias** como capas sobre el video — posición, tamaño, tiempo y toggle — quemadas en el export con ffmpeg
 8. **Elegir un estilo predefinido** (Chispa, Revista, Titular, Claro, Foco) para quemar en el export
@@ -77,6 +77,9 @@ El terreno para Fase 1.5 se prepara en Fase 1 (ver sección de modelo de capas m
 - Si hay imágenes activas, las superpone en su posición, tamaño y tiempo con ffmpeg
 - Si no hay estilo, exporta el video cortado limpio (con imágenes si las hay), sin texto
 - Ejecuta ffmpeg nativo local (no ffmpeg.wasm, no worker remoto)
+- El MP4 tiene el aspecto del video subido (ver «Aspecto del video»)
+- Antes de correr ffmpeg comprueba con ffprobe que cada imagen activa se pueda decodificar; si no, falla con el mensaje cerrado
+- **Watchdog:** si ffmpeg pasa 60 segundos sin progreso, se mata, se borra la carpeta del export y se devuelve el mensaje cerrado. Se mantiene un tiempo máximo total como techo de seguridad (2 min + 8 s por segundo exportado). El preset de calidad no cambia
 - Devuelve el archivo exportado o un stream de descarga
 - Rate limiting por IP desde el inicio
 - Mensaje de error legible sin exponer detalles internos del servidor
@@ -106,7 +109,7 @@ Estados de UI requeridos:
 |-----------|----------------|
 | `VideoUploader.tsx` | Drag-and-drop o input de archivo, subida múltiple en orden (videos e imágenes), botón **+** para añadir más; estados vacío, cargando subida, cargando transcripción, error |
 | `TranscriptionView.tsx` | Frases de 3–5 palabras con tiempos; frases quitadas marcadas visualmente |
-| `AutocutPanel.tsx` | Checks de autorrecorte + botón **Autorrecorte** + resumen de resultado |
+| `AutocutPanel.tsx` | Checks de autorrecorte + botón **Autorrecorte**; el resultado se avisa con el toast **Autorrecorte listo** |
 | `Timeline.tsx` | Línea de tiempo fluida a 60 fps (`requestAnimationFrame`) con pistas de video, texto e imagen; segmentos clicables, ajuste de bordes arrastrando inicio/fin, cabezal arrastrable sin tirones |
 | `StylePicker.tsx` | Selector de estilos predefinidos; muestra preview del estilo sobre el video |
 | `ExportButton.tsx` | Botón **Exportar** con estados cargando y error |
@@ -158,7 +161,11 @@ type Layer = {
 
 ## Estilos predefinidos en Fase 1
 
-Estos estilos son seleccionables con un botón cada uno. **No hay edición de fuente, tamaño ni posición en Fase 1.** Guardar, duplicar y editar un Look propio queda para Fase 2.
+Estos estilos son seleccionables con un botón cada uno. **No hay edición de fuente ni tamaño en Fase 1.** Sí se puede, por decisión del usuario:
+- **Mover el bloque de texto completo** de cada estilo arrastrándolo en el reproductor, igual que una imagen. La posición se guarda por estilo como desplazamiento en % del lienzo, entra en Deshacer/Rehacer y el export la respeta. En Revista se mueven los bloques de texto; la banda vertical es decoración y queda fija.
+- **Activar el contorno** del estilo con el check **Contorno** (ver «Sombra y contorno»).
+
+Guardar, duplicar y editar un Look propio queda para Fase 2.
 
 **Los cinco estilos usan nombres públicos exactos — Chispa, Revista, Titular, Claro, Foco — y nunca nombres de creadores, ni en la UI, ni en los slugs de código, ni en marketing.**
 
@@ -192,10 +199,17 @@ Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin
 
 ### Foco
 - Sans redondeada negrita blanca, centrada debajo de la cara sobre el pecho
-- Contorno oscuro fino
-- Número o dato destacado en amarillo — **siempre con sombra, contorno o caja oscura; nunca amarillo plano sobre fondo claro o rayado claro** (regla de contraste aplicada)
+- Subtitulado simple: sin sombra ni contorno por defecto; el contorno oscuro fino se activa con el check **Contorno**
+- Número o dato destacado en amarillo, siempre con sombra (palabra de énfasis)
+- Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra
 
-**Regla de contraste no negociable:** todo texto en pantalla lleva sombra, contorno o caja que garantice legibilidad contra el fotograma real, verificada en preview — no solo por el color del preset. Si el contraste falla, se marca antes de exportar.
+### Sombra y contorno (decisión del usuario)
+- **Sombra activa por defecto** en títulos y textos grandes (Chispa, Revista, Titular) y en las palabras de énfasis de todos los estilos. **Apagada** en subtitulado simple (Claro, Foco).
+- **Contorno opcional por estilo, apagado por defecto.** Se activa con el check **Contorno** del selector de estilo.
+- Si sombra y contorno están activos a la vez, **la sombra prevalece**. Interpretación aplicada hoy, *pendiente de decisión del usuario*: donde hay sombra no se dibuja contorno, así que en Chispa, Revista y Titular el check no cambia el texto base.
+- Si una imagen de apoyo choca con el texto (en tiempo y espacio), la imagen va detrás y el texto encima con sombra.
+- **No se fuerza contorno por contraste.** El check de contraste mide el fotograma real del preview y avisa (⚠ en el selector de estilo) cuando un texto sin sombra ni contorno no se lee sobre ese fondo. Amarillo plano sin sombra sobre fondo claro siempre se marca.
+- Preview y export aplican la misma regla (`resolveStyle` en `lib/styles/presets.ts`).
 
 ---
 
@@ -206,16 +220,12 @@ El autorrecorte aplica directo al presionar el botón — como en cualquier edit
 **Paso 1 — Configurar** (checks activables/desactivables):
 - ☐ **Quitar silencios**
 - ☐ **Quitar muletillas** *(eh, ah, este, o sea, y similares en español)*
-- ☐ **Quitar retakes** *(frases repetidas — se queda solo el último intento completo)*
+- ☐ **Quitar repeticiones** *(retakes: frases repetidas — se queda solo el último intento completo; solo dentro del mismo video, no entre videos consecutivos, en Fase 1)*. Nombre del check *pendiente de decisión del usuario*.
 
 **Paso 2 — Aplicar:**
 El usuario presiona **Autorrecorte**.
 La lógica corre en el navegador sobre el JSON de transcripción — sin llamada al servidor.
-Se muestra un resumen inmediato:
-```
-Se quitaron X segundos — Y silencios · Z muletillas · W retakes
-```
-Si algún valor es 0, se omite ese elemento del resumen.
+Se muestra un aviso tipo toast con el texto **Autorrecorte listo**, que se cierra solo a los 5 segundos o al tocarlo. No hay resumen con desglose de segundos, silencios, muletillas ni repeticiones en la UI.
 Los segmentos quitados se marcan visualmente en la línea de tiempo y en la transcripción.
 
 **Paso 3 — Ajustar después:**
@@ -233,7 +243,16 @@ Los segmentos quitados se marcan visualmente en la línea de tiempo y en la tran
 - Arrastrando el inicio o el fin de un clip: extiende o contrae ese corte (como en Premiere o CapCut)
 - Las etiquetas de los clips no se cortan ni se superponen
 - **Deshacer** y **Rehacer** siempre visibles
-- El preview refleja la lista de cortes al instante — sin re-codificar; la superposición de estilo e imágenes en preview usa la misma escala y posición que el export (lo que se ve es lo que sale en el MP4)
+- El preview refleja la lista de cortes al instante — sin re-codificar; la superposición de estilo e imágenes en preview usa la misma escala, posición, corte de línea, orden de capas y tiempo que el export (lo que se ve es lo que sale en el MP4)
+
+---
+
+## Aspecto del video (decisión del usuario)
+
+- El reproductor y el export **respetan el aspecto del video subido**, sin deformar ni recortar. 9:16 es solo el caso normal de los reels verticales.
+- El lienzo del proyecto toma el aspecto del primer video, con el lado corto en 1080 px (9:16 → 1080x1920, 16:9 → 1920x1080, 1:1 → 1080x1080). Si otro video del proyecto tiene otro aspecto, se encaja dentro con margen, sin deformar.
+- **Rotación de móvil corregida:** un video grabado en vertical que viene codificado en horizontal con rotación de 90° se trata como vertical.
+- El texto de los estilos está en px sobre el lado corto del lienzo y las posiciones en % del lienzo, iguales en preview y export.
 - El export re-codifica solo al final, una vez
 
 ---
@@ -303,7 +322,7 @@ Todo texto de botón, check y título en la UI de Fase 1 usa exactamente estos t
 |-------|-------------|
 | Eliminar silencios | **Quitar silencios** |
 | Eliminar muletillas | **Quitar muletillas** |
-| Eliminar retakes | **Quitar retakes** |
+| Eliminar retakes | **Quitar repeticiones** *(pendiente de decisión del usuario)* |
 
 ### Nombres de estilos predefinidos (tarjetas del selector)
 | Estilo | Copy exacto |
@@ -323,11 +342,17 @@ Todo texto de botón, check y título en la UI de Fase 1 usa exactamente estos t
 | Línea de tiempo | **Línea de tiempo** |
 | Vista de transcripción | **Transcripción** |
 
-### Resumen de autorrecorte (texto dinámico, estructura fija)
-```
-Se quitaron X segundos — Y silencios · Z muletillas · W retakes
-```
-Si algún valor es 0, se omite ese elemento.
+### Aviso de autorrecorte
+| Situación | Copy exacto |
+|-----------|-------------|
+| Autorrecorte aplicado | **Autorrecorte listo** *(toast de 5 segundos, se cierra al tocarlo)* |
+
+Sin resumen con desglose. La palabra «retakes» no aparece en la UI.
+
+### Opción de estilo
+| Check | Copy exacto |
+|-------|-------------|
+| Activar contorno del estilo | **Contorno** |
 
 ### Mensajes de error (cerrados)
 | Situación | Mensaje exacto al usuario |
@@ -342,8 +367,8 @@ Si algún valor es 0, se omite ese elemento.
 | Sección | Capas permitidas | Capas usadas | Estado |
 |---------|-----------------|--------------|--------|
 | Zona de subida | Componente (drag-and-drop) + botón | 2 | ✅ |
-| Panel de autorrecorte | Título + 3 checks + botón + resumen | 6 | ✅ |
-| Selector de estilos | Título + preview + 5 tarjetas de estilo + Back/Next | 8 | ✅ |
+| Panel de autorrecorte | Título + 3 checks + botón (+ toast temporal) | 5 | ✅ |
+| Selector de estilos | Título + preview + 5 tarjetas de estilo + Back/Next + check Contorno | 9 | ✅ |
 | Línea de tiempo | Título + componente | 2 | ✅ |
 | Transcripción | Título + segmentos con tiempos | 2 | ✅ |
 | Mensajes de error | Un solo mensaje por error | 1 | ✅ |
@@ -380,9 +405,9 @@ ai-editor-2/
 ├── components/
 │   ├── VideoUploader.tsx               # Drag-and-drop múltiple + estados de carga
 │   ├── TranscriptionView.tsx           # Frases de 3–5 palabras con tiempos
-│   ├── AutocutPanel.tsx                # Checks + botón Autorrecorte + resumen
+│   ├── AutocutPanel.tsx                # Checks + botón Autorrecorte (aviso: toast)
 │   ├── Timeline.tsx                    # Línea de tiempo con pistas video + texto + imagen
-│   ├── PreviewPlayer.tsx               # Reproductor vertical 9:16 con overlay de estilo e imágenes
+│   ├── PreviewPlayer.tsx               # Reproductor con el aspecto del video, overlay de estilo e imágenes
 │   ├── StylePicker.tsx                 # Tarjetas de estilos predefinidos
 │   └── ExportButton.tsx                # Botón Exportar con estados
 ├── lib/
@@ -411,7 +436,7 @@ ai-editor-2/
 - [ ] Se pueden subir varios videos desde la UI sin errores (máx. 500 MB por video, en orden de subida) e imágenes propias
 - [ ] El servidor llama a Groq con `verbose_json` y recibe una transcripción real con tiempos por palabra y por segmento
 - [ ] La transcripción aparece en pantalla en frases de 3–5 palabras, sincronizadas con el video
-- [ ] El autorrecorte aplica directo, muestra el resumen y marca los segmentos quitados — y no quita frases buenas
+- [ ] El autorrecorte aplica directo, avisa con el toast **Autorrecorte listo** y marca los segmentos quitados — y no quita frases buenas
 - [ ] Cada segmento quitado se puede restaurar individualmente
 - [ ] Deshacer y Rehacer funcionan sobre la lista de cortes
 - [ ] El ajuste de bordes de un clip funciona arrastrando el inicio o el fin
@@ -419,12 +444,21 @@ ai-editor-2/
 - [ ] Las imágenes se pueden mover, borrar individualmente, borrar todas y activar/desactivar con toggle
 - [ ] Los cinco estilos predefinidos son seleccionables y se ven en preview igual que en el export
 - [ ] El export produce un video cortado con ffmpeg nativo local — con estilo e imágenes quemadas, o limpio si no hay estilo
-- [ ] La preview vertical 9:16 coincide con el MP4 final
+- [ ] La preview coincide con el MP4 final, con el aspecto del video subido (9:16 en reels verticales)
 - [ ] Los seis estados de UI funcionan: vacío · cargando ×3 · éxito · error
 - [ ] El copy de todos los botones, checks, títulos y mensajes coincide exactamente con las tablas de copy cerrado
 - [ ] `GROQ_API_KEY` no aparece en ningún archivo del repo
 - [ ] El modelo de datos de `Layer` incluye los tipos `image` y `audio` preparados para Fase 1.5
 - [ ] El repo tiene un commit limpio con el trabajo de Fase 1
+
+---
+
+---
+
+## Pendiente de decisión del usuario
+
+1. **Nombre del check de repeticiones.** Hoy dice **Quitar repeticiones** (antes «Quitar retakes»). Falta confirmar el texto final.
+2. **Interpretación de «la sombra prevalece».** Hoy: donde hay sombra no se dibuja contorno, así que el check **Contorno** no cambia el texto base de Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
 
 ---
 
