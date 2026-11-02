@@ -17,6 +17,30 @@ export interface Cue {
   side: 'left' | 'right' // solo Revista alterna bloques
 }
 
+/**
+ * Líneas de un cue (Playbook regla 2): una palabra resaltada (otro color,
+ * tamaño, mayúsculas, cursiva u otra fuente) va sola en su línea, y las
+ * palabras del estilo base van juntas en las suyas. El corte se decide por
+ * estilo: la línea de la resaltada no se rellena con la palabra siguiente.
+ * Una línea base larga puede seguir partiéndose por ancho, nunca mezclando estilos.
+ * Lo usan la preview y el ASS para cortar igual.
+ */
+export function cueLines(words: CueWord[]): CueWord[][] {
+  const lines: CueWord[][] = []
+  let base: CueWord[] = []
+  for (const w of words) {
+    if (w.emph) {
+      if (base.length) lines.push(base)
+      base = []
+      lines.push([w])
+    } else {
+      base.push(w)
+    }
+  }
+  if (base.length) lines.push(base)
+  return lines
+}
+
 const STOPWORDS = new Set([
   'de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las', 'por', 'un', 'una',
   'para', 'con', 'no', 'su', 'al', 'lo', 'como', 'más', 'mas', 'pero', 'le', 'ya', 'o',
@@ -82,9 +106,15 @@ export function buildCues(
         text,
         emph: preset.emphasis ? isEmph(preset.emphasis.scope, texts, i, kIdx) : false,
       }))
-      const start = remap(chunk[0].start)
+      // primer cue desde el inicio del segmento y último hasta su fin: sin huecos
+      // ni solapes con los segmentos vecinos (bordes alineados a fotograma)
+      const start = ci === 0 ? seg.tlStart : Math.max(seg.tlStart, remap(chunk[0].start))
       const end =
-        ci === chunks.length - 1 ? seg.tlEnd : remap(chunk[chunk.length - 1].end)
+        ci === chunks.length - 1
+          ? seg.tlEnd
+          : Math.min(seg.tlEnd, remap(chunks[ci + 1][0].start))
+      // palabras que caen después del fin real del video (segmento recortado)
+      if (end - start <= 1e-6) return
       cues.push({
         id: `${unit.id}-c${ci}`,
         start,
@@ -97,9 +127,14 @@ export function buildCues(
   return cues
 }
 
+/**
+ * Cue visible en t: intervalo semiabierto [inicio, fin), igual que libass en el
+ * export. Sin tolerancias: en la frontera entre dos cues se ve el siguiente,
+ * como en el MP4.
+ */
 export function activeCue(cues: Cue[], t: number): Cue | null {
   for (const c of cues) {
-    if (t >= c.start - 0.02 && t <= c.end + 0.05) return c
+    if (t >= c.start && t < c.end) return c
   }
   return null
 }

@@ -44,10 +44,24 @@ function mkUnit(
   }
 }
 
-/** Construye las unidades de un video: particionan [0, duración] sin huecos ni solapes. */
-export function buildPhrases(videoId: string, tr: TranscriptionResult): PhraseUnit[] {
-  const words = (tr.words ?? []).filter((w) => w.end > w.start && w.word.trim())
-  const duration = Math.max(tr.duration ?? 0, words.length ? words[words.length - 1].end : 0)
+/**
+ * Construye las unidades de un video: particionan [0, duración] sin huecos ni solapes.
+ * `mediaDuration` es la duración real del video (ffprobe). Manda sobre los tiempos de
+ * Whisper: si una palabra termina después del último fotograma, se recorta ahí.
+ */
+export function buildPhrases(
+  videoId: string,
+  tr: TranscriptionResult,
+  mediaDuration?: number
+): PhraseUnit[] {
+  const raw = (tr.words ?? []).filter((w) => w.end > w.start && w.word.trim())
+  const duration =
+    mediaDuration && mediaDuration > 0
+      ? mediaDuration
+      : Math.max(tr.duration ?? 0, raw.length ? raw[raw.length - 1].end : 0)
+  const words = raw
+    .filter((w) => w.start < duration - 0.01)
+    .map((w) => (w.end > duration ? { ...w, end: duration } : w))
 
   if (!words.length) {
     return duration > 0 ? [mkUnit(videoId, 0, 'gap', [], 0, duration)] : []

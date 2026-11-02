@@ -89,9 +89,73 @@ Estas decisiones están cerradas. El agente no las cuestiona, no sugiere alterna
 - Ambos modos usan **el mismo motor** de procesamiento. No hay dos implementaciones.
 
 ### Regla de contraste (texto sobre video)
-- **Ningún texto sin sombra, contorno o caja.**
-- El contraste se verifica contra el fotograma real, no contra un fondo asumido.
-- **Amarillo plano sin sombra sobre fondo claro está prohibido.** Siempre.
+Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ningún texto sin sombra, contorno o caja».
+- **La sombra es difusa, siempre** (Playbook regla 1): halo suave alrededor de la letra, nunca dura ni desplazada.
+  - Valores de partida del manual VM: negro, Opacity 55%, Blurriness 17%, Distance 5, Angle -45°.
+  - Traducidos al lienzo: opacidad 55%; desenfoque del 17% del tamaño de la letra como radio CSS, y ese valor entre 1.5 en libass; 3 px a -45°, es decir 2 px por eje.
+  - En el export la sombra va en su propia capa: contorno (si está encendido) → sombra difusa → relleno nítido.
+- **Sombra activa por defecto** en Chispa, Revista, Titular y en las palabras de énfasis. **Sin sombra por defecto** en Claro y Foco (subtitulado simple).
+- **La palabra resaltada va sola en su línea** (Playbook regla 2): por color, tamaño, mayúsculas, cursiva u otra fuente. Nunca comparte línea con palabras de otro estilo, y su línea no se rellena. Aplica en los 5 estilos (`cueLines`).
+- **Nunca pegado al borde:** margen seguro del 6% por lado, contra el recorte de las plataformas, también al mover el bloque.
+- **Ningún subtítulo dura más que su clip:** se ajusta el subtítulo al clip, no al revés.
+- **Contorno apagado por defecto** en los 5 estilos: por defecto solo hay sombra y el contorno no se dibuja.
+- El check **Contorno** se puede marcar en todos los estilos, incluidos Chispa, Revista y Titular (no está bloqueado). Encendido, se dibuja un **contorno fino detrás de la sombra** y la sombra sigue prevaleciendo visualmente.
+- En Claro y Foco, sin sombra por defecto, el check también enciende el contorno.
+- **No se fuerza contorno solo por contraste.** El contraste se verifica contra el fotograma real, no contra un fondo asumido, y el editor **avisa** antes de exportar cuando un texto no se lee.
+- **Amarillo plano sin sombra sobre fondo claro** siempre se marca como fallo de contraste.
+- Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra.
+
+### Fuentes y prueba de la ñ (Playbook, manual VM p. 13)
+- Las fuentes de los 5 estilos **no cambian**: Trebuchet MS, Georgia y Arial.
+- **Montserrat, Playfair Display y Classic** son las fuentes base del manual VM (sin borde y con sombra negra). Quedan solo como referencia, **no como reemplazo** en esta fase.
+- **Prueba de la ñ y las tildes:** ninguna fuente usada puede achicar ni sustituir la ñ, las tildes ni los apóstrofes. `npm test` la corre con libass, el renderizador del export: sin signos tomados de otra fuente, Ñ y ñ del mismo ancho que N y n con la tilde visible, y apóstrofes con tamaño real.
+
+### Decisiones del usuario aplicadas en Fase 1
+- **Autorrecorte:** al aplicarlo se avisa con un popup tipo toast de 5 segundos, cerrable al tocarlo, con el texto **Autorrecorte listo**. No hay resumen con desglose en la UI. Lo quitado queda marcado en la línea de tiempo y en la transcripción.
+- **Botón dividido de autorrecorte:**
+  - **Autorrecorte** aplica directo. La flecha a su derecha abre un desplegable con los interruptores **Silencios**, **Muletillas** y **Repeticiones**, los 3 activos por defecto.
+  - El botón muestra con 3 puntos cuántos están activos.
+  - La última elección se guarda como preferencia del navegador para el siguiente video.
+  - En móvil, el desplegable abre al tocar, cierra al tocar fuera y no lo tapan el player fijo ni la línea de tiempo.
+  - El motor de autorrecorte no cambia.
+- **Aspecto del video:** el reproductor y el export respetan el aspecto del video subido, sin distorsión ni recorte forzado a 9:16; 9:16 es solo el caso normal de reels verticales. Un video de móvil con rotación de 90° sale vertical, no horizontal. Si se mezclan aspectos, el video que no coincide con el lienzo queda encajado con barras, sin deformar.
+- **Texto movible:** el bloque de texto de cada estilo se arrastra en la preview. La posición se guarda en %, se puede deshacer y rehacer, y el export la respeta. Si una imagen choca con el texto, la imagen va detrás y el texto encima con sombra.
+- **Retake:** solo dentro del mismo video en Fase 1, no entre videos consecutivos.
+- **Export:** watchdog de ffmpeg por falta de progreso. Si pasa 60 segundos sin progreso, se mata el proceso, se borra la carpeta del export y se devuelve «No se pudo exportar. Intenta de nuevo.». El tiempo máximo actual se mantiene como techo de seguridad. El preset de calidad no cambia por ahora.
+- **Layout responsive:**
+  - En escritorio (1024 px o más): preview a la izquierda, opciones a la derecha y línea de tiempo abajo.
+  - En móvil y tablet (menos de 1024 px; probado en 768 y 390): player fijo arriba a ancho completo, con un máximo del 45% de la altura y sin pantalla completa; debajo, las opciones con scroll; al final, la línea de tiempo con el botón **Plegar** / **Desplegar**, que solo aparece por debajo de 1024 px.
+  - Sin scroll horizontal y sin etiquetas recortadas.
+- **Reglas de UI** (aplicadas en `app/globals.css`):
+  - espaciado solo en 4, 8, 16, 24, 32, 48 y 64;
+  - una familia de UI y cuerpo de 16 px;
+  - botones de 52, 44 o 36 px y un CTA primario por pantalla;
+  - movimiento bajo 300 ms, ease-out, solo transform y opacity, con prefers-reduced-motion;
+  - sin gradientes, sin sombras en reposo, sin textos cortados ni desvanecidos, sin eyebrow.
+- **Selector de estilos:** la preview es el reproductor real. Arriba hay una barra de 5 segmentos que marca el estilo actual. Cada tarjeta muestra el fotograma real del clip con una frase real y el estilo aplicado, solo con el nombre. Abajo van el check **Contorno** y **Back** / **Next**, que recorren Chispa → Revista → Titular → Claro → Foco → sin estilo. Sin Surprise me, sin presets nuevos y sin selector de fuentes.
+
+### Guía de estilo del Playbook (referencia, no programada en Fase 1)
+Del Playbook de estilo de edición (13 páginas, con lo rescatado del manual VM). Sirve para editar y revisar el reel terminado; **no es código nuevo** y no se implementa sin instrucción del arquitecto:
+- **Video de fondo con una sola frase** (por ejemplo, una playa): el contraste no lo crea el texto. Va una capa negra al 20% sobre el video y la frase encima, sin borde ni sombra. Nada de viñeta.
+- **Encuadre del referente y momento cero:**
+  - se calca el encuadre del referente (altura de cámara, distancia a los bordes y huecos libres para el texto), no sus errores de estilo;
+  - el primer fotograma ya da contexto de qué trata el video.
+- **Corte por la boca:**
+  - el video empieza y termina con voz en el 99% de los casos, sin silencio al inicio ni al final;
+  - se corta en el ligero cierre de boca al empezar y en la boca estática al terminar, sin cortar palabras;
+  - la duración solo se ajusta cortando silencios.
+- **Sonido:**
+  - nivel de voz con puntos rojos leves en la barra de audio, sin llegar a todo rojo;
+  - no se acelera el audio;
+  - música y efectos siempre bajo la voz.
+- **Logos e imágenes:** en alta calidad, con borde redondo y sombra cuidada, sin wordmark recortado.
+- **Copy en pantalla:**
+  - sin afirmaciones en segunda persona («no tienes», «te falta»);
+  - el llamado a la acción escrito es **sígueme para más**.
+
+### Decisiones resueltas por el usuario
+- **Nombre del antiguo check:** resuelto con el botón dividido y el interruptor **Repeticiones**.
+- **«La sombra prevalece»:** resuelto. Con el check Contorno encendido, el contorno fino se dibuja detrás de la sombra y la sombra sigue prevaleciendo visualmente.
 
 ---
 

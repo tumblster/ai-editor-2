@@ -5,10 +5,22 @@
 
 import type { CSSProperties } from 'react'
 
-import type { Cue } from '@/lib/cues'
-import { markEmph } from '@/lib/cues'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, type StylePreset, type TextStyle } from '@/lib/styles/presets'
-import type { StylePresetId } from '@/types/project'
+import { cueLines, type Cue, type CueWord } from '@/lib/cues'
+import {
+  assFontScale,
+  outlineLayers,
+  shadowBlurCss,
+  shadowXY,
+  type StylePreset,
+  type TextStyle,
+} from '@/lib/styles/presets'
+
+/** Sombra difusa en CSS: -45° (abajo a la derecha), desenfoque según el tamaño de la letra. */
+function diffuseShadowCss(size: number, distance: number, alpha: number): string {
+  const { x, y } = shadowXY(distance)
+  return `${x}px ${y}px ${shadowBlurCss(size)}px rgba(0,0,0,${alpha})`
+}
+import { COLLISION_SHADOW, NO_OFFSET, type TextOffset } from '@/lib/textLayout'
 
 function rgba(hex: string, alpha: number): string {
   const clean = hex.replace('#', '')
@@ -21,53 +33,106 @@ function rgba(hex: string, alpha: number): string {
 export function textStyleCss(t: TextStyle): CSSProperties {
   return {
     fontFamily: `'${t.font}', 'Segoe UI', sans-serif`,
-    fontWeight: t.bold ? 800 : 400,
+    fontWeight: t.bold ? 700 : 400, // ASS solo tiene negrita 700
     fontStyle: t.italic ? 'italic' : 'normal',
     fontSize: t.size,
     color: t.color,
-    lineHeight: 1.18,
-    textShadow: t.shadowOffset > 0 ? `0 ${t.shadowOffset}px 0 rgba(0,0,0,${t.shadowAlpha})` : undefined,
+    lineHeight: assFontScale(t.font), // alto de línea de libass = ascendente + descendente
+    // ASS desplaza la sombra en x e y por igual
+    // sombra difusa (DIFFUSE_SHADOW): mismo desplazamiento, opacidad y desenfoque que el ASS
+    textShadow: t.shadowOffset > 0 ? diffuseShadowCss(t.size, t.shadowOffset, t.shadowAlpha) : undefined,
+    // El trazo CSS va centrado en el borde del glifo y paint-order deja visible solo
+    // la mitad exterior: el doble de ancho da el mismo contorno exterior que \bord de ASS.
     WebkitTextStroke:
-      t.outlineWidth > 0 ? `${t.outlineWidth}px ${rgba(t.outlineColor, t.outlineAlpha)}` : undefined,
+      t.outlineWidth > 0 ? `${t.outlineWidth * 2}px ${rgba(t.outlineColor, t.outlineAlpha)}` : undefined,
     paintOrder: 'stroke fill',
   }
 }
 
-export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue | null }) {
-  const { base, placement, emphasis } = preset
+interface CaptionProps {
+  preset: StylePreset
+  cue: Cue | null
+  offset?: TextOffset // bloque movido (% del lienzo)
+  collision?: boolean // una imagen queda debajo: el texto lleva sombra
+  onDragStart?: (e: React.PointerEvent) => void // solo en el reproductor
+}
 
-  const words = (cue?.words ?? []).map((w, i) => {
-    if (!w.emph || !emphasis) {
-      return <span key={i}>{w.text} </span>
+export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = false, onDragStart }: CaptionProps) {
+  const { placement } = preset
+  // Contorno encendido: dos capas como en el ASS. Abajo el contorno fino, arriba
+  // el texto con sus sombras: el contorno queda detrás y la sombra prevalece.
+  const layers = outlineLayers(preset)
+  const over = layers ? layers.over : preset
+  const under = layers?.under ?? null
+  // la imagen va detrás y el texto encima con sombra
+  const overBase =
+    collision && over.base.shadowOffset <= 0
+      ? {
+          ...over.base,
+          outlineWidth: 0,
+          shadowOffset: COLLISION_SHADOW.offset,
+          shadowAlpha: COLLISION_SHADOW.alpha,
+        }
+      : over.base
+  const drag: CSSProperties = onDragStart
+    ? { pointerEvents: 'auto', cursor: 'move', touchAction: 'none', userSelect: 'none' }
+    : {}
+
+  const wordsFor = (p: StylePreset, base: TextStyle) => {
+    const emphasis = p.emphasis
+    const word = (w: CueWord, i: number) => {
+      if (!w.emph || !emphasis) {
+        return <span key={i}>{w.text} </span>
+      }
+      const css: CSSProperties = { color: emphasis.color }
+      if (emphasis.scale !== 1) css.fontSize = base.size * emphasis.scale
+      if (emphasis.italic) css.fontStyle = 'italic'
+      if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
+      if (emphasis.uppercase) css.textTransform = 'uppercase'
+      // las palabras de énfasis llevan sombra (en la capa de arriba)
+      if (emphasis.shadowOffset > 0) {
+        css.textShadow = diffuseShadowCss(base.size * emphasis.scale, emphasis.shadowOffset, emphasis.shadowAlpha)
+        if (base.outlineWidth > 0) css.WebkitTextStroke = '0px transparent'
+      }
+      return (
+        <span key={i} style={css}>
+          {w.text}{' '}
+        </span>
+      )
     }
-    const css: CSSProperties = { color: emphasis.color }
-    if (emphasis.scale !== 1) css.fontSize = base.size * emphasis.scale
-    if (emphasis.italic) css.fontStyle = 'italic'
-    if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
-    if (emphasis.uppercase) css.textTransform = 'uppercase'
-    if (emphasis.outlineWidth) {
-      css.WebkitTextStroke = `${emphasis.outlineWidth}px rgba(0,0,0,${emphasis.outlineAlpha ?? 0.8})`
-      css.paintOrder = 'stroke fill'
-    }
-    return (
-      <span key={i} style={css}>
-        {w.text}{' '}
-      </span>
-    )
-  })
+    // regla 2: la palabra resaltada va sola en su línea; cada línea, un solo estilo
+    const words = (cue?.words ?? []).map((w) => (emphasis ? w : { ...w, emph: false }))
+    let n = 0
+    return cueLines(words).map((line, li) => (
+      <div key={li}>{line.map((w) => word(w, n++))}</div>
+    ))
+  }
+
+  // capa de arriba (interactiva) y, si hay contorno, la de abajo (decorativa)
+  const textLayers = (box: CSSProperties) => (
+    <>
+      {under && (
+        <div aria-hidden style={{ ...box, ...textStyleCss(under.base), pointerEvents: 'none' }}>
+          {wordsFor(under, under.base)}
+        </div>
+      )}
+      <div className="caption-text" style={{ ...box, ...textStyleCss(overBase), ...drag }} onPointerDown={onDragStart}>
+        {wordsFor(over, overBase)}
+      </div>
+    </>
+  )
 
   if (placement.kind === 'blocks') {
     const [bx0, bx1] = placement.band
-    const blockStyle = (side: 'left' | 'right'): CSSProperties => {
+    const blockBox = (side: 'left' | 'right'): CSSProperties => {
       const [x0, x1] = side === 'left' ? placement.left : placement.right
       return {
         position: 'absolute',
-        left: `${x0}%`,
+        left: `${x0 + offset.x}%`,
         width: `${x1 - x0}%`,
-        top: '50%',
+        top: `${50 + offset.y}%`,
         transform: 'translateY(-50%)',
         textAlign: side === 'left' ? 'left' : 'right',
-        ...textStyleCss(base),
       }
     }
     return (
@@ -82,64 +147,22 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
             background: `rgba(255,255,255,${placement.bandAlpha})`,
           }}
         />
-        {cue && <div style={blockStyle(cue.side)}>{words}</div>}
+        {cue && textLayers(blockBox(cue.side))}
       </>
     )
   }
 
   if (!cue) return null
 
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: '8%',
-        width: '84%',
-        top: `${placement.yPercent}%`,
-        transform: 'translateY(-50%)',
-        textAlign: 'center',
-        ...textStyleCss(base),
-      }}
-    >
-      {words}
-    </div>
-  )
+  return textLayers({
+    position: 'absolute',
+    left: `${8 + offset.x}%`,
+    width: '84%',
+    top: `${placement.yPercent + offset.y}%`,
+    transform: 'translateY(-50%)',
+    textAlign: 'center',
+  })
 }
 
-/** Tarjeta en miniatura con el mismo clip de ejemplo para los cinco estilos. */
-export function StyleThumb({ preset, width }: { preset: StylePreset; width: number }) {
-  const scale = width / DESIGN_W
-  return (
-    <div className="style-thumb" style={{ width, height: DESIGN_H * scale }}>
-      <div
-        style={{
-          width: DESIGN_W,
-          height: DESIGN_H,
-          transform: `scale(${scale})`,
-          transformOrigin: '0 0',
-          position: 'relative',
-        }}
-      >
-        <ExampleCue presetId={preset.id} />
-      </div>
-    </div>
-  )
-}
-
-// El mismo clip de ejemplo para todas las tarjetas
+// Texto de ejemplo para las tarjetas de estilo si todavía no hay frases
 export const EXAMPLE_WORDS = ['solo', '3', 'pasos', 'y', 'listo']
-
-function ExampleCue({ presetId }: { presetId: StylePresetId }) {
-  const preset = STYLE_PRESETS[presetId]
-  const emph = preset.emphasis
-    ? markEmph(preset.emphasis.scope, EXAMPLE_WORDS)
-    : EXAMPLE_WORDS.map(() => false)
-  const cue: Cue = {
-    id: 'example',
-    start: 0,
-    end: 1,
-    words: EXAMPLE_WORDS.map((text, i) => ({ text, emph: emph[i] })),
-    side: 'left',
-  }
-  return <CaptionRender preset={preset} cue={cue} />
-}

@@ -29,10 +29,24 @@ interface Item {
   seg?: CutSegment
 }
 
-const PAD = 20
+// margen izquierdo mayor que la columna fija de etiquetas de pista (56 px),
+// para que ningún clip ni marca quede tapado; margen derecho más corto
+const PAD = 64
+const PAD_R = 24
 const MIN_BLOCK_PX = 2
 const STUB_MIN_PX = 10
-const CHAR_PX = 5.4 // ancho aproximado de carácter a 10px
+// Las etiquetas se muestran solo si caben enteras (nunca recortadas). Se miden
+// con la misma fuente que usa el CSS de .tl-label y .tl-videoname.
+const LABEL_FONT = "500 12px Inter, 'Segoe UI', system-ui, sans-serif"
+const LABEL_PAD = 16 // px: 8 a cada lado
+let measureCtx: CanvasRenderingContext2D | null = null
+function textWidth(text: string): number {
+  if (typeof document === 'undefined') return Infinity
+  measureCtx ??= document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return Infinity
+  measureCtx.font = LABEL_FONT
+  return measureCtx.measureText(text).width
+}
 
 export default function Timeline({
   videos,
@@ -96,7 +110,7 @@ export default function Timeline({
       byUnit.set(unit.id, item)
       x += item.width
     }
-    return { items: list, itemByUnit: byUnit, totalPx: x + PAD }
+    return { items: list, itemByUnit: byUnit, totalPx: x + PAD_R }
   }, [ordered, segments, pxPerSec])
 
   const tlToPx = useCallback(
@@ -108,7 +122,7 @@ export default function Timeline({
           return item.left + (t - s.tlStart) * pxPerSec
         }
       }
-      return totalPx - PAD
+      return totalPx - PAD_R
     },
     [segments, itemByUnit, pxPerSec, totalPx]
   )
@@ -140,7 +154,7 @@ export default function Timeline({
   useEffect(() => {
     if (fittedRef.current || !scrollRef.current || !srcTotal) return
     fittedRef.current = true
-    const w = scrollRef.current.clientWidth - 2 * PAD - 24
+    const w = scrollRef.current.clientWidth - PAD - PAD_R - 8
     const fit = Math.min(Math.max(w / srcTotal, 3), 200)
     setPxPerSec(fit)
   }, [srcTotal])
@@ -173,6 +187,13 @@ export default function Timeline({
       }
     })
   }, [playback])
+
+  // el layout cambió (zoom, cortes): el cabezal se recoloca sin esperar a que avance el tiempo
+  useEffect(() => {
+    if (playheadRef.current) {
+      playheadRef.current.style.transform = `translateX(${tlToPx(playback.getTime())}px)`
+    }
+  }, [tlToPx, playback])
 
   // ---- arrastre del cabezal ----
   const scrubbing = useRef(false)
@@ -356,7 +377,8 @@ export default function Timeline({
     const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600]
     const step = steps.find((s) => s * pxPerSec >= 72) ?? 900
     const out: number[] = []
-    for (let t = 0; t <= duration + step; t += step) out.push(t)
+    // solo marcas dentro de la duración: las de más allá se encimaban al final
+    for (let t = 0; t <= duration + 1e-6; t += step) out.push(t)
     return out
   }, [pxPerSec, duration])
 
@@ -413,9 +435,11 @@ export default function Timeline({
         {/* franja de nombres de video */}
         <div className="tl-videolane">
           {videoSpans.map((s) => (
-            <span key={s.index} className="tl-videoname" style={{ left: s.left, width: Math.max(s.right - s.left - 4, 24) }}>
-              {s.name}
-            </span>
+            textWidth(s.name) + LABEL_PAD <= s.right - s.left ? (
+              <span key={s.index} className="tl-videoname" style={{ left: s.left }} title={s.name}>
+                {s.name}
+              </span>
+            ) : null
           ))}
         </div>
 
@@ -425,7 +449,7 @@ export default function Timeline({
           {items.map((item) => {
             const { unit } = item
             const removed = unit.removed
-            const labelFits = item.width >= unit.text.length * CHAR_PX + 10
+            const labelFits = item.width >= textWidth(unit.text) + LABEL_PAD
             return (
               <div
                 key={unit.id}

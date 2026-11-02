@@ -11,11 +11,11 @@ interface Props {
   onToggle: (layerId: string) => void
   onRemove: (layerId: string) => void
   onRemoveAll: () => void
+  onAdd: (imageId: string) => void
 }
 
-export default function ImagesPanel({ images, imageLayers, onToggle, onRemove, onRemoveAll }: Props) {
+export default function ImagesPanel({ images, imageLayers, onToggle, onRemove, onRemoveAll, onAdd }: Props) {
   if (!images.length) return null
-  const urlBySrc = new Map(images.map((img) => [img.id, img.url]))
 
   return (
     <section className="panel">
@@ -31,9 +31,22 @@ export default function ImagesPanel({ images, imageLayers, onToggle, onRemove, o
         {images.map((img) => {
           const layer = imageLayers.find((l) => l.src === img.id)
           return (
-            <div key={img.id} className="image-item">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt={img.name} />
+            <div key={img.id} className={`image-item ${layer ? '' : 'is-unused'}`}>
+              {layer ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={img.url} alt={img.name} />
+              ) : (
+                <button
+                  type="button"
+                  className="image-item-add"
+                  aria-label={`Añadir ${img.name}`}
+                  onClick={() => onAdd(img.id)}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={img.url} alt="" />
+                  <span aria-hidden>+</span>
+                </button>
+              )}
               {layer && (
                 <div className="image-item-actions">
                   <label className="switch" title="Mostrar u ocultar">

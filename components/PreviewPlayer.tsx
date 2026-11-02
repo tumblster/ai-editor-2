@@ -1,18 +1,22 @@
 'use client'
 
-// Reproductor vertical 9:16. La superposición de estilo y de imágenes vive en un
-// lienzo 1080x1920 escalado — la misma escala y posición que usa el export.
+// Reproductor con el aspecto del video subido (9:16 en reels verticales). La
+// superposición de estilo e imágenes vive en un lienzo del mismo tamaño que el
+// MP4 (lado corto 1080 px), escalado — la misma escala y posición que el export.
 
 import { useEffect, useRef, useState } from 'react'
 
 import { CaptionRender } from './CaptionRender'
 import { activeCue, type Cue } from '@/lib/cues'
+import type { Canvas } from '@/lib/canvas'
+import { clampOffset, cueHitsImage, safeOffset, textRect, type TextOffset } from '@/lib/textLayout'
 import type { StylePreset } from '@/lib/styles/presets'
 import type { Playback } from '@/lib/usePlayback'
 import { formatTime } from '@/lib/timeline'
 import type { ImageAsset, Layer, VideoAsset } from '@/types/project'
 
 interface Props {
+  canvas: Canvas
   videos: VideoAsset[]
   images: ImageAsset[]
   imageLayers: Layer[]
@@ -20,19 +24,35 @@ interface Props {
   cues: Cue[]
   playback: Playback
   onImagePatch: (layerId: string, patch: Partial<Layer>) => void
+  textOffset: TextOffset
+  onTextMove: (offset: TextOffset) => void
 }
 
 function CaptionLive({
   preset,
   cues,
   playback,
+  canvas,
+  scale,
+  offset,
+  imageLayers,
+  onMove,
 }: {
   preset: StylePreset
   cues: Cue[]
   playback: Playback
+  canvas: Canvas
+  scale: number
+  offset: TextOffset
+  imageLayers: Layer[]
+  onMove: (offset: TextOffset) => void
 }) {
   const [cue, setCue] = useState<Cue | null>(null)
   const idRef = useRef<string | null>(null)
+  // arrastre del bloque de texto completo, como las imágenes
+  const [live, setLive] = useState<TextOffset | null>(null)
+  const liveRef = useRef<TextOffset | null>(null)
+  const drag = useRef<{ px: number; py: number; x: number; y: number; id: number } | null>(null)
 
   useEffect(() => {
     return playback.subscribe((t) => {
@@ -45,18 +65,63 @@ function CaptionLive({
     })
   }, [playback, cues])
 
-  return <CaptionRender preset={preset} cue={cue} />
+  const shown = live ?? safeOffset(preset, offset, canvas)
+  const collision = cue ? cueHitsImage(cue, textRect(preset, cue.side, shown, canvas), imageLayers) : false
+
+  const onDragStart = (e: React.PointerEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    drag.current = { px: e.clientX, py: e.clientY, x: offset.x, y: offset.y, id: e.pointerId }
+  }
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      // margen seguro también al arrastrar: el bloque no se pega al borde
+      const next = safeOffset(preset, clampOffset({
+        x: d.x + ((e.clientX - d.px) / (canvas.w * scale)) * 100,
+        y: d.y + ((e.clientY - d.py) / (canvas.h * scale)) * 100,
+      }), canvas)
+      liveRef.current = next
+      setLive(next)
+    }
+    const up = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      drag.current = null
+      const moved = liveRef.current
+      liveRef.current = null
+      setLive(null)
+      if (moved) onMove(moved)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [canvas, scale, onMove, preset])
+
+  return (
+    <CaptionRender preset={preset} cue={cue} offset={shown} collision={collision} onDragStart={onDragStart} />
+  )
 }
 
 function ImageBlock({
   layer,
   url,
   scale,
+  canvas,
   onPatch,
 }: {
   layer: Layer
   url: string
   scale: number
+  canvas: Canvas
   onPatch: (layerId: string, patch: Partial<Layer>) => void
 }) {
   const [live, setLive] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -95,8 +160,8 @@ function ImageBlock({
   const onPointerMove = (e: React.PointerEvent) => {
     const d = drag.current
     if (!d) return
-    const dxPct = ((e.clientX - d.px) / (1080 * scale)) * 100
-    const dyPct = ((e.clientY - d.py) / (1920 * scale)) * 100
+    const dxPct = ((e.clientX - d.px) / (canvas.w * scale)) * 100
+    const dyPct = ((e.clientY - d.py) / (canvas.h * scale)) * 100
     if (d.mode === 'move') {
       setLive({
         x: Math.min(Math.max(d.x + dxPct, d.w / 2), 100 - d.w / 2),
@@ -145,6 +210,7 @@ function ImageBlock({
 }
 
 export default function PreviewPlayer({
+  canvas,
   videos,
   images,
   imageLayers,
@@ -152,20 +218,43 @@ export default function PreviewPlayer({
   cues,
   playback,
   onImagePatch,
+  textOffset,
+  onTextMove,
 }: Props) {
-  const fieldRef = useRef<HTMLDivElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLSpanElement>(null)
-  const [scale, setScale] = useState(0.2)
+  // tamaño en pantalla del reproductor: el mayor que cabe con el aspecto del lienzo
+  const [size, setSize] = useState({ w: 0, h: 0 })
 
   useEffect(() => {
-    const el = fieldRef.current
+    const el = boxRef.current
     if (!el) return
-    const update = () => setScale(el.clientWidth / 1080)
+    const update = () => {
+      const k = Math.min(el.clientWidth / canvas.w, el.clientHeight / canvas.h)
+      // el alto sale del ancho redondeado: mismo aspecto que el video, sin deformar
+      const w = Math.floor(canvas.w * k)
+      setSize({ w, h: Math.min(Math.round((w * canvas.h) / canvas.w), Math.floor(el.clientHeight)) })
+    }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+  }, [canvas.w, canvas.h])
+  const scale = size.w ? size.w / canvas.w : 0.2
+
+  // Imágenes visibles en el tiempo actual: mismo criterio que el export
+  // (overlay enable='between(t, inicio, fin)', extremos incluidos).
+  const [visibleIds, setVisibleIds] = useState('')
+  useEffect(() => {
+    return playback.subscribe((t) => {
+      const ids = imageLayers
+        .filter((l) => l.enabled !== false && t >= l.start && t <= l.end)
+        .map((l) => l.id)
+        .join('|')
+      setVisibleIds((prev) => (prev === ids ? prev : ids))
+    })
+  }, [playback, imageLayers])
+  const visible = new Set(visibleIds.split('|'))
 
   useEffect(() => {
     return playback.subscribe((t) => {
@@ -179,9 +268,10 @@ export default function PreviewPlayer({
 
   return (
     <div className="player-col">
+      <div ref={boxRef} className="playfield-box">
       <div
-        ref={fieldRef}
         className="playfield"
+        style={{ width: size.w, height: size.h }}
         onClick={(e) => {
           if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'VIDEO') {
             playback.toggle()
@@ -200,19 +290,36 @@ export default function PreviewPlayer({
         ))}
         <div
           className="overlay-canvas"
-          style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
+          style={{
+            width: canvas.w,
+            height: canvas.h,
+            transform: `translate(-50%, -50%) scale(${scale})`,
+          }}
         >
-          {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
           {imageLayers
-            .filter((l) => l.enabled !== false)
+            .filter((l) => l.enabled !== false && visible.has(l.id))
             .map((l) => {
               const url = l.src ? urlBySrc.get(l.src) : undefined
               if (!url) return null
               return (
-                <ImageBlock key={l.id} layer={l} url={url} scale={scale} onPatch={onImagePatch} />
+                <ImageBlock key={l.id} layer={l} url={url} scale={scale} canvas={canvas} onPatch={onImagePatch} />
               )
             })}
+          {/* el texto va encima de las imágenes, igual que en el export */}
+          {stylePreset && (
+            <CaptionLive
+              preset={stylePreset}
+              cues={cues}
+              playback={playback}
+              canvas={canvas}
+              scale={scale}
+              offset={textOffset}
+              imageLayers={imageLayers}
+              onMove={onTextMove}
+            />
+          )}
         </div>
+      </div>
       </div>
 
       <div className="player-controls">

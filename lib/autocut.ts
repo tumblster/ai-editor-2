@@ -139,14 +139,3 @@ function detectRetakes(phrases: PhraseUnit[]): void {
     }
   }
 }
-
-/** Resumen exacto: Se quitaron X segundos — Y silencios · Z muletillas · W retakes (omite ceros). */
-export function formatSummary(s: AutocutSummary): string {
-  const parts: string[] = []
-  if (s.silences > 0) parts.push(`${s.silences} silencios`)
-  if (s.fillers > 0) parts.push(`${s.fillers} muletillas`)
-  if (s.retakes > 0) parts.push(`${s.retakes} retakes`)
-  const secs = Math.max(Math.round(s.seconds), 0)
-  if (parts.length === 0) return `Se quitaron ${secs} segundos`
-  return `Se quitaron ${secs} segundos — ${parts.join(' · ')}`
-}

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "tsc": "tsc --noEmit"
+    "tsc": "tsc --noEmit",
+    "test": "node scripts/test-logic.cjs"
   },
   "dependencies": {
     "next": "^15.1.0",

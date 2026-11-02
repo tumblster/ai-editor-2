@@ -51,6 +51,7 @@ export async function POST(req: Request) {
           name: file.name,
           url: `/api/files/${id}`,
           duration: probe.duration,
+          fps: probe.fps,
           width: probe.width,
           height: probe.height,
           hasAudio: probe.hasAudio,
