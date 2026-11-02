@@ -26,16 +26,6 @@ function ratio(a: number, b: number): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-/** Zona del texto en % del lienzo: [x0, y0, x1, y1]. */
-function textZone(preset: StylePreset, side: 'left' | 'right'): [number, number, number, number] {
-  const p = preset.placement
-  if (p.kind === 'blocks') {
-    const [x0, x1] = side === 'left' ? p.left : p.right
-    return [x0, 40, x1, 60]
-  }
-  return [8, p.yPercent - 6, 92, p.yPercent + 6]
-}
-
 /**
  * Luminancia del fondo bajo el texto, tomando el percentil alto (las zonas
  * claras son las que rompen la lectura). Usa el mismo encuadre que el export:
@@ -110,8 +100,4 @@ export function failsContrast(preset: StylePreset, bgLum: number): boolean {
     if (!emphOk) return true
   }
   return false
-}
-
-export function zoneFor(preset: StylePreset, side: 'left' | 'right' = 'left') {
-  return textZone(preset, side)
 }

@@ -23,6 +23,7 @@ const { STYLE_PRESETS, resolveStyle } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
 const { probeImage, probeVideo, runFfmpeg, FfmpegTimeoutError, exportTimeoutMs } = require(`${B}/ffmpeg.js`)
 const { canvasFor, DEFAULT_CANVAS } = require(`${B}/canvas.js`)
+const { textRect, cueHitsImage, clampOffset } = require(`${B}/textLayout.js`)
 
 const tr1 = require(`${R}/testmedia/tr1.json`).transcription
 const tr2 = require(`${R}/testmedia/tr2.json`).transcription
@@ -184,6 +185,37 @@ test('ASS: sombra/contorno según el estilo, banda visible, WrapStyle 1 y tiempo
   assert(dialogue.length > 0)
   for (const d of dialogue) assert(/^Dialogue: \d,\d:\d\d:\d\d\.\d\d,\d:\d\d:\d\d\.\d\d,/.test(d), d)
   assert(dialogue.some((d) => d.includes(',0:00:02.26,')), 'frontera a 68 fotogramas debe ser 0:00:02.26')
+})
+
+// ---- Texto movible e imágenes ----
+test('texto movible: el ASS respeta el desplazamiento guardado en %', () => {
+  const total = totalDuration(segs)
+  const cues = buildCues('claro', cut, segs)
+  const pos = (ass) => ass.split('\n').find((l) => l.startsWith('Dialogue:')).match(/\\pos\((\d+),(\d+)\)/).slice(1).map(Number)
+  assert.deepStrictEqual(pos(buildAss('claro', cues, total)), [540, Math.round(0.595 * 1920)])
+  assert.deepStrictEqual(pos(buildAss('claro', cues, total, undefined, { offset: { x: 10, y: -20 } })), [Math.round(0.6 * 1080), Math.round(0.395 * 1920)])
+  const rev = buildAss('revista', buildCues('revista', cut, segs), total, undefined, { offset: { x: 5, y: 10 } })
+  assert(rev.includes(`\\an4\\pos(${Math.round(0.13 * 1080)},${Math.round(0.6 * 1920)})`), 'Revista bloque izquierdo movido')
+  assert.deepStrictEqual(clampOffset({ x: 99, y: -99 }), { x: 50, y: -50 })
+  assert.deepStrictEqual(clampOffset({ x: 'a' }), { x: 0, y: 0 })
+})
+
+test('imagen detrás del texto: si choca, el texto lleva sombra; si no, queda igual', () => {
+  const total = totalDuration(segs)
+  const cues = buildCues('foco', cut, segs)
+  const foco = resolveStyle(STYLE_PRESETS.foco)
+  const rect = textRect(foco, 'left', { x: 0, y: 0 }, DEFAULT_CANVAS)
+  const under = { id: 'i', type: 'image', start: 0, end: total, order: 10, x: 50, y: 78, width: 40, height: 21, enabled: true }
+  const away = { ...under, y: 15 }
+  assert.strictEqual(cueHitsImage(cues[0], rect, [under]), true, 'la imagen por defecto choca con Foco')
+  assert.strictEqual(cueHitsImage(cues[0], rect, [away]), false)
+  assert.strictEqual(cueHitsImage(cues[0], rect, [{ ...under, enabled: false }]), false, 'imagen apagada no cuenta')
+  const hit = buildAss('foco', cues, total, undefined, { imageLayers: [under] })
+  const free = buildAss('foco', cues, total, undefined, { imageLayers: [away] })
+  assert(hit.split('\n').filter((l) => l.startsWith('Dialogue:')).every((l) => l.includes(',MainS,')), 'con imagen debajo usa el estilo con sombra')
+  assert(free.split('\n').filter((l) => l.startsWith('Dialogue:')).every((l) => l.includes(',Main,')))
+  const mainS = hit.split('\n').find((l) => l.startsWith('Style: MainS,')).split(',')
+  assert.deepStrictEqual(mainS.slice(16, 18), ['0', '3'], 'sombra de choque, sin contorno')
 })
 
 // ---- Aspecto del video ----

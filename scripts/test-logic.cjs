@@ -29,6 +29,7 @@ const files = [
   'lib/styles/presets.ts',
   'lib/ffmpeg.ts',
   'lib/canvas.ts',
+  'lib/textLayout.ts',
   'types/project.ts',
 ]
 

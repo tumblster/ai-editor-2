@@ -101,6 +101,8 @@ export interface EditDoc {
   styleId: StylePresetId | null
   // contorno opcional por estilo (apagado por defecto)
   outlines?: Partial<Record<StylePresetId, boolean>>
+  // bloque de texto movido por estilo: desplazamiento en % del lienzo
+  textOffsets?: Partial<Record<StylePresetId, { x: number; y: number }>>
 }
 
 export interface ProjectState {

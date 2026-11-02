@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from 'react'
 import { CaptionRender } from './CaptionRender'
 import { activeCue, type Cue } from '@/lib/cues'
 import type { Canvas } from '@/lib/canvas'
+import { clampOffset, cueHitsImage, textRect, type TextOffset } from '@/lib/textLayout'
 import type { StylePreset } from '@/lib/styles/presets'
 import type { Playback } from '@/lib/usePlayback'
 import { formatTime } from '@/lib/timeline'
@@ -23,19 +24,35 @@ interface Props {
   cues: Cue[]
   playback: Playback
   onImagePatch: (layerId: string, patch: Partial<Layer>) => void
+  textOffset: TextOffset
+  onTextMove: (offset: TextOffset) => void
 }
 
 function CaptionLive({
   preset,
   cues,
   playback,
+  canvas,
+  scale,
+  offset,
+  imageLayers,
+  onMove,
 }: {
   preset: StylePreset
   cues: Cue[]
   playback: Playback
+  canvas: Canvas
+  scale: number
+  offset: TextOffset
+  imageLayers: Layer[]
+  onMove: (offset: TextOffset) => void
 }) {
   const [cue, setCue] = useState<Cue | null>(null)
   const idRef = useRef<string | null>(null)
+  // arrastre del bloque de texto completo, como las imágenes
+  const [live, setLive] = useState<TextOffset | null>(null)
+  const liveRef = useRef<TextOffset | null>(null)
+  const drag = useRef<{ px: number; py: number; x: number; y: number; id: number } | null>(null)
 
   useEffect(() => {
     return playback.subscribe((t) => {
@@ -48,7 +65,49 @@ function CaptionLive({
     })
   }, [playback, cues])
 
-  return <CaptionRender preset={preset} cue={cue} />
+  const shown = live ?? offset
+  const collision = cue ? cueHitsImage(cue, textRect(preset, cue.side, shown, canvas), imageLayers) : false
+
+  const onDragStart = (e: React.PointerEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    drag.current = { px: e.clientX, py: e.clientY, x: offset.x, y: offset.y, id: e.pointerId }
+  }
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      const next = clampOffset({
+        x: d.x + ((e.clientX - d.px) / (canvas.w * scale)) * 100,
+        y: d.y + ((e.clientY - d.py) / (canvas.h * scale)) * 100,
+      })
+      liveRef.current = next
+      setLive(next)
+    }
+    const up = (e: PointerEvent) => {
+      const d = drag.current
+      if (!d || e.pointerId !== d.id) return
+      drag.current = null
+      const moved = liveRef.current
+      liveRef.current = null
+      setLive(null)
+      if (moved) onMove(moved)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+    return () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+    }
+  }, [canvas.w, canvas.h, scale, onMove])
+
+  return (
+    <CaptionRender preset={preset} cue={cue} offset={shown} collision={collision} onDragStart={onDragStart} />
+  )
 }
 
 function ImageBlock({
@@ -158,6 +217,8 @@ export default function PreviewPlayer({
   cues,
   playback,
   onImagePatch,
+  textOffset,
+  onTextMove,
 }: Props) {
   const boxRef = useRef<HTMLDivElement>(null)
   const timeRef = useRef<HTMLSpanElement>(null)
@@ -228,7 +289,18 @@ export default function PreviewPlayer({
               )
             })}
           {/* el texto va encima de las imágenes, igual que en el export */}
-          {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
+          {stylePreset && (
+            <CaptionLive
+              preset={stylePreset}
+              cues={cues}
+              playback={playback}
+              canvas={canvas}
+              scale={scale}
+              offset={textOffset}
+              imageLayers={imageLayers}
+              onMove={onTextMove}
+            />
+          )}
         </div>
       </div>
       </div>

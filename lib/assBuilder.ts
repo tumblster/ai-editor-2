@@ -1,9 +1,10 @@
 // Genera el archivo .ASS que ffmpeg quema con libass.
 // Los parámetros salen del mismo preset que usa el preview (lib/styles/presets.ts).
 
-import type { StylePresetId } from '@/types/project'
+import type { Layer, StylePresetId } from '@/types/project'
 import type { Cue } from './cues'
 import { DEFAULT_CANVAS, type Canvas } from './canvas'
+import { COLLISION_SHADOW, clampOffset, cueHitsImage, textRect, type TextOffset } from './textLayout'
 import {
   STYLE_PRESETS,
   assFontSize,
@@ -118,22 +119,40 @@ function cueText(cue: Cue, base: TextStyle, emph: EmphasisSpec): string {
   return parts.join(' ')
 }
 
+export interface AssOptions extends StyleOptions {
+  offset?: TextOffset // bloque de texto movido por la usuaria (% del lienzo)
+  imageLayers?: Layer[] // para saber cuándo una imagen queda debajo del texto
+}
+
+/** Variante del estilo con la sombra de choque (imagen debajo del texto); la sombra prevalece. */
+function withCollisionShadow(t: TextStyle): TextStyle {
+  if (t.shadowOffset > 0) return t
+  return {
+    ...t,
+    outlineWidth: 0,
+    shadowOffset: COLLISION_SHADOW.offset,
+    shadowAlpha: COLLISION_SHADOW.alpha,
+  }
+}
+
 export function buildAss(
   styleId: StylePresetId,
   cues: Cue[],
   totalDuration: number,
   canvas: Canvas = DEFAULT_CANVAS,
-  options: StyleOptions = {}
+  options: AssOptions = {}
 ): string {
-  const DESIGN_W = canvas.w
-  const DESIGN_H = canvas.h
+  const W = canvas.w
+  const H = canvas.h
   const preset = resolveStyle(STYLE_PRESETS[styleId], options)
+  const offset = clampOffset(options.offset)
+  const imageLayers = options.imageLayers ?? []
   const header = [
     '[Script Info]',
     '; Generado por el editor — Fase 1',
     'ScriptType: v4.00+',
-    `PlayResX: ${DESIGN_W}`,
-    `PlayResY: ${DESIGN_H}`,
+    `PlayResX: ${W}`,
+    `PlayResY: ${H}`,
     // 1 = corte de línea al final (como CSS); 0 balanceaba las líneas y partía distinto
     'WrapStyle: 1',
     'ScaledBorderAndShadow: yes',
@@ -149,21 +168,34 @@ export function buildAss(
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
   ]
 
-  const pctX = (p: number) => Math.round((p / 100) * DESIGN_W)
+  const px = (p: number, size: number) => Math.round((p / 100) * size)
+  const shadowed = withCollisionShadow(preset.base)
+  const textOf = (cue: Cue, base: TextStyle) =>
+    preset.emphasis
+      ? cueText(cue, base, preset.emphasis)
+      : cue.words.map((w) => escapeAss(w.text)).filter(Boolean).join(' ')
+  // Con \pos, libass sigue usando los márgenes del estilo para el ancho de corte
+  // de línea: el ancho del bloque se mantiene y \pos lo mueve.
+  const hits = (cue: Cue) => cueHitsImage(cue, textRect(preset, cue.side, offset, canvas), imageLayers)
 
   if (preset.placement.kind === 'blocks') {
-    styles.push(styleLine('RevL', preset.base, 4, pctX(preset.placement.left[0]), DESIGN_W - pctX(preset.placement.left[1]), 0))
-    styles.push(styleLine('RevR', preset.base, 6, pctX(preset.placement.right[0]), DESIGN_W - pctX(preset.placement.right[1]), 0))
-    // Banda vertical: dibujo \p1 — con Fontsize 64 la escala del dibujo es 1 unidad = 1 px
-    const band = preset.placement
-    const x0 = pctX(band.band[0])
-    const x1 = pctX(band.band[1])
+    const pl = preset.placement
+    const [l0, l1] = pl.left
+    const [r0, r1] = pl.right
+    styles.push(styleLine('RevL', preset.base, 4, px(l0, W), W - px(l1, W), 0))
+    styles.push(styleLine('RevR', preset.base, 6, px(r0, W), W - px(r1, W), 0))
+    styles.push(styleLine('RevLS', shadowed, 4, px(l0, W), W - px(l1, W), 0))
+    styles.push(styleLine('RevRS', shadowed, 6, px(r0, W), W - px(r1, W), 0))
+    // Banda vertical: dibujo \p1 — con Fontsize 64 la escala del dibujo es 1 unidad = 1 px.
+    // Es decoración del estilo: no se mueve con el texto.
+    const x0 = px(pl.band[0], W)
+    const x1 = px(pl.band[1], W)
     // relleno blanco con la misma opacidad que la preview (bandAlpha es opacidad)
     const bandStyle = [
       'Style: Band',
       'Arial',
       64,
-      assColor('#FFFFFF', 1 - band.bandAlpha),
+      assColor('#FFFFFF', 1 - pl.bandAlpha),
       assColor('#FFFFFF', 1),
       assColor('#000000', 1),
       assColor('#000000', 1),
@@ -171,27 +203,30 @@ export function buildAss(
     ].join(',')
     styles.push(bandStyle)
     events.push(
-      `Dialogue: 0,${assTime(0)},${assTime(totalDuration)},Band,,0,0,0,,{\\an7\\pos(0,0)\\p1}m ${x0} 0 l ${x1} 0 l ${x1} ${DESIGN_H} l ${x0} ${DESIGN_H}{\\p0}`
+      `Dialogue: 0,${assTime(0)},${assTime(totalDuration)},Band,,0,0,0,,{\\an7\\pos(0,0)\\p1}m ${x0} 0 l ${x1} 0 l ${x1} ${H} l ${x0} ${H}{\\p0}`
     )
+    const y = px(50 + offset.y, H)
     for (const cue of cues) {
-      const style = cue.side === 'left' ? 'RevL' : 'RevR'
-      const text = preset.emphasis
-        ? cueText(cue, preset.base, preset.emphasis)
-        : cue.words.map((w) => escapeAss(w.text)).filter(Boolean).join(' ')
+      const hit = hits(cue)
+      const text = textOf(cue, hit ? shadowed : preset.base)
       if (!text) continue
+      const left = cue.side === 'left'
+      const style = (left ? 'RevL' : 'RevR') + (hit ? 'S' : '')
+      const pos = left ? `\\an4\\pos(${px(l0 + offset.x, W)},${y})` : `\\an6\\pos(${px(r1 + offset.x, W)},${y})`
       // texto (capa 1) encima de la banda (capa 0), como en la preview
-      events.push(`Dialogue: 1,${assTime(cue.start)},${assTime(cue.end)},${style},,0,0,0,,${text}`)
+      events.push(`Dialogue: 1,${assTime(cue.start)},${assTime(cue.end)},${style},,0,0,0,,{${pos}}${text}`)
     }
   } else {
-    styles.push(styleLine('Main', preset.base, 5, pctX(8), pctX(8), 0))
-    const y = Math.round((preset.placement.yPercent / 100) * DESIGN_H)
+    styles.push(styleLine('Main', preset.base, 5, px(8, W), px(8, W), 0))
+    styles.push(styleLine('MainS', shadowed, 5, px(8, W), px(8, W), 0))
+    const x = px(50 + offset.x, W)
+    const y = px(preset.placement.yPercent + offset.y, H)
     for (const cue of cues) {
-      const text = preset.emphasis
-        ? cueText(cue, preset.base, preset.emphasis)
-        : cue.words.map((w) => escapeAss(w.text)).filter(Boolean).join(' ')
+      const hit = hits(cue)
+      const text = textOf(cue, hit ? shadowed : preset.base)
       if (!text) continue
       events.push(
-        `Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},Main,,0,0,0,,{\\an5\\pos(${Math.round(DESIGN_W / 2)},${y})}${text}`
+        `Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},${hit ? 'MainS' : 'Main'},,0,0,0,,{\\an5\\pos(${x},${y})}${text}`
       )
     }
   }

@@ -21,6 +21,7 @@ import {
 import { buildCutSegments, totalDuration } from '@/lib/timeline'
 import { STYLE_PRESETS } from '@/lib/styles/presets'
 import { canvasFor } from '@/lib/canvas'
+import { clampOffset } from '@/lib/textLayout'
 import type { Layer, PhraseUnit, StylePresetId } from '@/types/project'
 
 export const runtime = 'nodejs'
@@ -36,6 +37,7 @@ interface ExportBody {
   imageLayers?: Layer[]
   styleId?: StylePresetId | null
   outline?: boolean
+  textOffset?: { x?: number; y?: number }
 }
 
 export async function POST(req: Request) {
@@ -101,7 +103,11 @@ export async function POST(req: Request) {
     let hasAss = false
     if (styleId) {
       const cues = buildCues(styleId, phrases, segments)
-      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl, canvas, { outline: body.outline === true }), 'utf-8')
+      await writeFile(`${exportDir}/style.ass`, buildAss(styleId, cues, totalTl, canvas, {
+          outline: body.outline === true,
+          offset: clampOffset(body.textOffset),
+          imageLayers: (body.imageLayers ?? []).filter((l) => l.type === 'image' && l.enabled !== false),
+        }), 'utf-8')
       hasAss = true
     }
 

@@ -9,6 +9,7 @@ import type { Cue } from '@/lib/cues'
 import { markEmph } from '@/lib/cues'
 import { DESIGN_H, DESIGN_W, STYLE_PRESETS, assFontScale, type StylePreset, type TextStyle } from '@/lib/styles/presets'
 import type { StylePresetId } from '@/types/project'
+import { COLLISION_SHADOW, NO_OFFSET, type TextOffset } from '@/lib/textLayout'
 
 function rgba(hex: string, alpha: number): string {
   const clean = hex.replace('#', '')
@@ -39,8 +40,29 @@ export function textStyleCss(t: TextStyle): CSSProperties {
   }
 }
 
-export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue | null }) {
-  const { base, placement, emphasis } = preset
+interface CaptionProps {
+  preset: StylePreset
+  cue: Cue | null
+  offset?: TextOffset // bloque movido (% del lienzo)
+  collision?: boolean // una imagen queda debajo: el texto lleva sombra
+  onDragStart?: (e: React.PointerEvent) => void // solo en el reproductor
+}
+
+export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = false, onDragStart }: CaptionProps) {
+  const { placement, emphasis } = preset
+  // la imagen va detrás y el texto encima con sombra (la sombra prevalece sobre el contorno)
+  const base =
+    collision && preset.base.shadowOffset <= 0
+      ? {
+          ...preset.base,
+          outlineWidth: 0,
+          shadowOffset: COLLISION_SHADOW.offset,
+          shadowAlpha: COLLISION_SHADOW.alpha,
+        }
+      : preset.base
+  const drag: CSSProperties = onDragStart
+    ? { pointerEvents: 'auto', cursor: 'move', touchAction: 'none', userSelect: 'none' }
+    : {}
 
   const words = (cue?.words ?? []).map((w, i) => {
     if (!w.emph || !emphasis) {
@@ -69,12 +91,13 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
       const [x0, x1] = side === 'left' ? placement.left : placement.right
       return {
         position: 'absolute',
-        left: `${x0}%`,
+        left: `${x0 + offset.x}%`,
         width: `${x1 - x0}%`,
-        top: '50%',
+        top: `${50 + offset.y}%`,
         transform: 'translateY(-50%)',
         textAlign: side === 'left' ? 'left' : 'right',
         ...textStyleCss(base),
+        ...drag,
       }
     }
     return (
@@ -89,7 +112,11 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
             background: `rgba(255,255,255,${placement.bandAlpha})`,
           }}
         />
-        {cue && <div style={blockStyle(cue.side)}>{words}</div>}
+        {cue && (
+          <div className="caption-text" style={blockStyle(cue.side)} onPointerDown={onDragStart}>
+            {words}
+          </div>
+        )}
       </>
     )
   }
@@ -98,15 +125,18 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
 
   return (
     <div
+      className="caption-text"
       style={{
         position: 'absolute',
-        left: '8%',
+        left: `${8 + offset.x}%`,
         width: '84%',
-        top: `${placement.yPercent}%`,
+        top: `${placement.yPercent + offset.y}%`,
         transform: 'translateY(-50%)',
         textAlign: 'center',
         ...textStyleCss(base),
+        ...drag,
       }}
+      onPointerDown={onDragStart}
     >
       {words}
     </div>

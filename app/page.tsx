@@ -16,13 +16,14 @@ import VideoUploader, { type UploaderBusy } from '@/components/VideoUploader'
 import { applyAutocut, type AutocutOptions } from '@/lib/autocut'
 import { COPY } from '@/lib/copy'
 import { activeCue, buildCues } from '@/lib/cues'
-import { failsContrast, sampleZoneLuminance, zoneFor } from '@/lib/contrast'
+import { failsContrast, sampleZoneLuminance } from '@/lib/contrast'
 import { historyReducer } from '@/lib/history'
 import { buildPhrases } from '@/lib/phrases'
 import { STYLE_PRESETS, resolveStyle } from '@/lib/styles/presets'
 import { usePlayback } from '@/lib/usePlayback'
 import { buildCutSegments } from '@/lib/timeline'
 import { canvasFor } from '@/lib/canvas'
+import { NO_OFFSET, clampOffset, textRect, type TextOffset } from '@/lib/textLayout'
 import type { EditDoc } from '@/types/project'
 import type { ImageAsset, Layer, PhraseUnit, StylePresetId, VideoAsset } from '@/types/project'
 
@@ -69,6 +70,10 @@ export default function Page() {
   const preset = useMemo(
     () => (edit.styleId ? resolveStyle(STYLE_PRESETS[edit.styleId], { outline: outlineOn }) : null),
     [edit.styleId, outlineOn]
+  )
+  const textOffset = useMemo(
+    () => (edit.styleId ? clampOffset(edit.textOffsets?.[edit.styleId]) : NO_OFFSET),
+    [edit.styleId, edit.textOffsets]
   )
   // aspecto del proyecto = el del primer video (el export usa la misma regla)
   const canvas = useMemo(() => canvasFor(videos[0]?.width, videos[0]?.height), [videos])
@@ -233,6 +238,18 @@ export default function Page() {
 
   const removeAllImageLayers = () => setEdit({ ...edit, imageLayers: [] })
 
+  // el bloque de texto completo del estilo elegido se mueve como las imágenes
+  const editRef = useRef(edit)
+  editRef.current = edit
+  const moveText = useCallback(
+    (offset: TextOffset) => {
+      const cur = editRef.current
+      if (!cur.styleId) return
+      setEdit({ ...cur, textOffsets: { ...cur.textOffsets, [cur.styleId]: clampOffset(offset) } })
+    },
+    [setEdit]
+  )
+
   // una imagen borrada de la pista se vuelve a poner con un clic en el panel
   const addImageLayer = (imageId: string) => {
     const t = Math.min(playback.getTime(), Math.max(0, playback.duration - IMAGE_DEFAULT_SECONDS))
@@ -258,10 +275,10 @@ export default function Page() {
       const cue = activeCue(cues, t)
       const el = playback.activeVideoElement()
       if (!cue || !el) return
-      const lum = sampleZoneLuminance(el, zoneFor(preset, cue.side), canvas, sampler)
+      const lum = sampleZoneLuminance(el, textRect(preset, cue.side, textOffset, canvas), canvas, sampler)
       if (lum !== null) setContrastIssue(failsContrast(preset, lum))
     })
-  }, [preset, cues, playback, canvas])
+  }, [preset, cues, playback, canvas, textOffset])
 
   const canExport = videos.length > 0 && segments.length > 0
 
@@ -336,6 +353,7 @@ export default function Page() {
           imageLayers={edit.imageLayers}
           styleId={edit.styleId}
           outline={outlineOn}
+          textOffset={textOffset}
         />
       </div>
 
@@ -349,6 +367,8 @@ export default function Page() {
           cues={cues}
           playback={playback}
           onImagePatch={patchImageLayer}
+          textOffset={textOffset}
+          onTextMove={moveText}
         />
       </div>
 
