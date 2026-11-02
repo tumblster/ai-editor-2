@@ -98,6 +98,12 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
 
 ### Decisiones del usuario aplicadas en Fase 1
 - **Autorrecorte:** al aplicarlo se avisa con un popup tipo toast de 5 segundos, cerrable al tocarlo, con el texto **Autorrecorte listo**. No hay resumen con desglose en la UI. Lo quitado queda marcado en la línea de tiempo y en la transcripción.
+- **Botón dividido de autorrecorte:**
+  - **Autorrecorte** aplica directo. La flecha a su derecha abre un desplegable con los interruptores **Silencios**, **Muletillas** y **Repeticiones**, los 3 activos por defecto.
+  - El botón muestra con 3 puntos cuántos están activos.
+  - La última elección se guarda como preferencia del navegador para el siguiente video.
+  - En móvil, el desplegable abre al tocar, cierra al tocar fuera y no lo tapan el player fijo ni la línea de tiempo.
+  - El motor de autorrecorte no cambia.
 - **Aspecto del video:** el reproductor y el export respetan el aspecto del video subido, sin distorsión ni recorte forzado a 9:16; 9:16 es solo el caso normal de reels verticales. Un video de móvil con rotación de 90° sale vertical, no horizontal. Si se mezclan aspectos, el video que no coincide con el lienzo queda encajado con barras, sin deformar.
 - **Texto movible:** el bloque de texto de cada estilo se arrastra en la preview. La posición se guarda en %, se puede deshacer y rehacer, y el export la respeta. Si una imagen choca con el texto, la imagen va detrás y el texto encima con sombra.
 - **Retake:** solo dentro del mismo video en Fase 1, no entre videos consecutivos.
@@ -115,8 +121,9 @@ Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ni
 - **Selector de estilos:** la preview es el reproductor real. Arriba hay una barra de 5 segmentos que marca el estilo actual. Cada tarjeta muestra el fotograma real del clip con una frase real y el estilo aplicado, solo con el nombre. Abajo van el check **Contorno** y **Back** / **Next**, que recorren Chispa → Revista → Titular → Claro → Foco → sin estilo. Sin Surprise me, sin presets nuevos y sin selector de fuentes.
 
 ### Pendiente de decisión del usuario
-1. **Nombre del check:** hoy **Quitar repeticiones**, en vez de «Quitar retakes».
-2. **Interpretación de «la sombra prevalece»:** hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+1. **Interpretación de «la sombra prevalece»:** hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+
+*Resuelto:* el nombre del antiguo check. El usuario decidió el botón dividido con el interruptor **Repeticiones**.
 
 ---
 

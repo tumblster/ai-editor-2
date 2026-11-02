@@ -109,7 +109,7 @@ Estados de UI requeridos:
 |-----------|----------------|
 | `VideoUploader.tsx` | Drag-and-drop o input de archivo, subida múltiple en orden (videos e imágenes), botón **+** para añadir más; estados vacío, cargando subida, cargando transcripción, error |
 | `TranscriptionView.tsx` | Frases de 3–5 palabras con tiempos; frases quitadas marcadas visualmente |
-| `AutocutPanel.tsx` | Checks de autorrecorte + botón **Autorrecorte**; el resultado se avisa con el toast **Autorrecorte listo** |
+| `AutocutPanel.tsx` | Botón dividido: **Autorrecorte** aplica directo y la flecha abre el desplegable con los interruptores **Silencios**, **Muletillas** y **Repeticiones**; el resultado se avisa con el toast **Autorrecorte listo** |
 | `Timeline.tsx` | Línea de tiempo fluida a 60 fps (`requestAnimationFrame`) con pistas de video, texto e imagen; segmentos clicables, ajuste de bordes arrastrando inicio/fin, cabezal arrastrable sin tirones |
 | `StylePicker.tsx` | Selector de estilos con layout de tarjetas: barra de 5 segmentos arriba, tarjetas con fotograma y frase reales, check **Contorno**, **Back** y **Next** abajo (ver «Selector de estilos») |
 | `ExportButton.tsx` | Botón **Exportar** con estados cargando y error |
@@ -217,10 +217,15 @@ Si el usuario no elige ningún estilo, el export es el video cortado limpio, sin
 
 El autorrecorte aplica directo al presionar el botón — como en cualquier editor profesional. Lo que lo hace seguro es poder deshacer, rehacer y restaurar después.
 
-**Paso 1 — Configurar** (checks activables/desactivables):
-- ☐ **Quitar silencios**
-- ☐ **Quitar muletillas** *(eh, ah, este, o sea, y similares en español)*
-- ☐ **Quitar repeticiones** *(retakes: frases repetidas — se queda solo el último intento completo; solo dentro del mismo video, no entre videos consecutivos, en Fase 1)*. Nombre del check *pendiente de decisión del usuario*.
+**Paso 1 — Configurar** (decisión del usuario: botón dividido). La flecha a la derecha de **Autorrecorte** abre un desplegable con 3 interruptores, los 3 activos por defecto:
+- **Silencios**
+- **Muletillas** *(eh, ah, este, o sea, y similares en español)*
+- **Repeticiones** *(retakes: frases repetidas; se queda solo el último intento completo, y solo dentro del mismo video en Fase 1, no entre videos consecutivos)*
+
+Detalles del botón dividido:
+- El botón **Autorrecorte** muestra con 3 puntos cuántos interruptores están activos, y se deshabilita si no hay ninguno.
+- La última elección se guarda en el navegador (solo preferencia) y se mantiene en el siguiente video.
+- El desplegable se abre dentro del panel, al tocar la flecha, y se cierra al tocar fuera o con Escape. En móvil no lo tapan el player fijo ni la línea de tiempo.
 
 **Paso 2 — Aplicar:**
 El usuario presiona **Autorrecorte**.
@@ -346,12 +351,12 @@ Todo texto de botón, check y título en la UI de Fase 1 usa exactamente estos t
 | Restaurar segmento individual | **Restaurar** |
 | Iniciar export | **Exportar** |
 
-### Checks de autorrecorte
-| Check | Copy exacto |
-|-------|-------------|
-| Eliminar silencios | **Quitar silencios** |
-| Eliminar muletillas | **Quitar muletillas** |
-| Eliminar retakes | **Quitar repeticiones** *(pendiente de decisión del usuario)* |
+### Interruptores de autorrecorte (desplegable del botón dividido)
+| Interruptor | Copy exacto |
+|-------------|-------------|
+| Eliminar silencios | **Silencios** |
+| Eliminar muletillas | **Muletillas** |
+| Eliminar retakes | **Repeticiones** |
 
 ### Nombres de estilos predefinidos (tarjetas del selector)
 | Estilo | Copy exacto |
@@ -402,7 +407,7 @@ Sin resumen con desglose. La palabra «retakes» no aparece en la UI.
 | Sección | Capas permitidas | Capas usadas | Estado |
 |---------|-----------------|--------------|--------|
 | Zona de subida | Componente (drag-and-drop) + botón | 2 | ✅ |
-| Panel de autorrecorte | Título + 3 checks + botón (+ toast temporal) | 5 | ✅ |
+| Panel de autorrecorte | Título + botón dividido (+ desplegable con 3 interruptores y toast temporal) | 2 | ✅ |
 | Selector de estilos | Título + barra de pasos + 5 tarjetas de estilo + check Contorno + Back/Next (la preview es el reproductor) | 9 | ✅ |
 | Línea de tiempo | Título + componente (+ botón Plegar/Desplegar en móvil) | 3 | ✅ |
 | Transcripción | Título + segmentos con tiempos | 2 | ✅ |
@@ -492,8 +497,9 @@ ai-editor-2/
 
 ## Pendiente de decisión del usuario
 
-1. **Nombre del check.** Hoy dice **Quitar repeticiones**, en vez de «Quitar retakes». Falta confirmar el texto final.
-2. **Interpretación de «la sombra prevalece».** Hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+1. **Interpretación de «la sombra prevalece».** Hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+
+*Resuelto:* el nombre del antiguo check «Quitar repeticiones». El usuario decidió el botón dividido con el interruptor **Repeticiones**.
 
 ---
 
