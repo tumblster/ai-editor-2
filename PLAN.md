@@ -250,8 +250,8 @@ Los segmentos quitados se marcan visualmente en la línea de tiempo y en la tran
 ## Aspecto del video (decisión del usuario)
 
 - El reproductor y el export **respetan el aspecto del video subido**, sin deformar ni recortar. 9:16 es solo el caso normal de los reels verticales.
-- El lienzo del proyecto toma el aspecto del primer video, con el lado corto en 1080 px (9:16 → 1080x1920, 16:9 → 1920x1080, 1:1 → 1080x1080). Si otro video del proyecto tiene otro aspecto, se encaja dentro con margen, sin deformar.
-- **Rotación de móvil corregida:** un video grabado en vertical que viene codificado en horizontal con rotación de 90° se trata como vertical.
+- El lienzo del proyecto toma el aspecto del primer video, con el lado corto en 1080 px (9:16 → 1080x1920, 16:9 → 1920x1080, 1:1 → 1080x1080). Si se mezclan aspectos, el video que no coincide con el lienzo queda encajado con barras, sin deformar.
+- **Rotación de móvil corregida:** un video de móvil con rotación de 90° sale vertical, no horizontal.
 - El texto de los estilos está en px sobre el lado corto del lienzo y las posiciones en % del lienzo, iguales en preview y export.
 - El export re-codifica solo al final, una vez
 
@@ -457,8 +457,8 @@ ai-editor-2/
 
 ## Pendiente de decisión del usuario
 
-1. **Nombre del check de repeticiones.** Hoy dice **Quitar repeticiones** (antes «Quitar retakes»). Falta confirmar el texto final.
-2. **Interpretación de «la sombra prevalece».** Hoy: donde hay sombra no se dibuja contorno, así que el check **Contorno** no cambia el texto base de Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+1. **Nombre del check.** Hoy dice **Quitar repeticiones**, en vez de «Quitar retakes». Falta confirmar el texto final.
+2. **Interpretación de «la sombra prevalece».** Hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
 
 ---
 

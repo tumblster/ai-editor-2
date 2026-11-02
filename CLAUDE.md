@@ -90,22 +90,22 @@ Estas decisiones están cerradas. El agente no las cuestiona, no sugiere alterna
 
 ### Regla de contraste (texto sobre video)
 Actualizada por decisión del usuario (Fase 1). Reemplaza la regla anterior «ningún texto sin sombra, contorno o caja».
-- **Sombra activa por defecto** en títulos, textos grandes y palabras de énfasis. **Apagada** en subtitulado simple (Claro, Foco).
-- **Contorno opcional por estilo, apagado por defecto.** Si sombra y contorno están activos, la sombra prevalece (interpretación pendiente, ver abajo).
+- **Sombra activa por defecto** en Chispa, Revista, Titular y en las palabras de énfasis. **Sin sombra por defecto** en Claro y Foco (subtitulado simple).
+- **Contorno apagado por defecto**, con un check **Contorno** por estilo. Si sombra y contorno están activos, la sombra prevalece (interpretación pendiente, ver abajo).
 - **No se fuerza contorno solo por contraste.** El contraste se verifica contra el fotograma real, no contra un fondo asumido, y el editor **avisa** antes de exportar cuando un texto no se lee.
 - **Amarillo plano sin sombra sobre fondo claro** siempre se marca como fallo de contraste.
 - Si una imagen de apoyo choca con el texto, la imagen va detrás y el texto encima con sombra.
 
 ### Decisiones del usuario aplicadas en Fase 1
-- **Autorrecorte:** al aplicarlo se avisa con un toast **Autorrecorte listo** (5 segundos, se cierra al tocarlo). No hay resumen con desglose en la UI. Lo quitado queda marcado en la línea de tiempo y en la transcripción.
-- **Aspecto del video:** el reproductor y el export respetan el aspecto del video subido, sin deformar ni recortar. No es fijo 9:16; 9:16 es solo el caso normal de reels verticales. La rotación de los videos de móvil se corrige (un video vertical codificado en horizontal con rotación de 90° se trata como vertical).
-- **Texto movible:** el bloque de texto completo de cada estilo se mueve como una imagen. La posición se guarda en % por estilo, con Deshacer/Rehacer, y el export la respeta.
+- **Autorrecorte:** al aplicarlo se avisa con un popup tipo toast de 5 segundos, cerrable al tocarlo, con el texto **Autorrecorte listo**. No hay resumen con desglose en la UI. Lo quitado queda marcado en la línea de tiempo y en la transcripción.
+- **Aspecto del video:** el reproductor y el export respetan el aspecto del video subido, sin distorsión ni recorte forzado a 9:16; 9:16 es solo el caso normal de reels verticales. Un video de móvil con rotación de 90° sale vertical, no horizontal. Si se mezclan aspectos, el video que no coincide con el lienzo queda encajado con barras, sin deformar.
+- **Texto movible:** el bloque de texto de cada estilo se arrastra en la preview. La posición se guarda en %, se puede deshacer y rehacer, y el export la respeta. Si una imagen choca con el texto, la imagen va detrás y el texto encima con sombra.
 - **Retake:** solo dentro del mismo video en Fase 1, no entre videos consecutivos.
-- **Export:** watchdog por progreso. Si ffmpeg pasa 60 segundos sin progreso, se mata, se limpia la carpeta del export y se devuelve «No se pudo exportar. Intenta de nuevo.». El tiempo máximo total se mantiene como techo de seguridad. El preset de calidad no cambia por ahora.
+- **Export:** watchdog de ffmpeg por falta de progreso. Si pasa 60 segundos sin progreso, se mata el proceso, se borra la carpeta del export y se devuelve «No se pudo exportar. Intenta de nuevo.». El tiempo máximo actual se mantiene como techo de seguridad. El preset de calidad no cambia por ahora.
 
 ### Pendiente de decisión del usuario
-- **Nombre del check de repeticiones:** hoy **Quitar repeticiones** (antes «Quitar retakes»).
-- **Interpretación de «la sombra prevalece»:** hoy, donde hay sombra no se dibuja contorno, así que el check **Contorno** no cambia el texto base de Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
+1. **Nombre del check:** hoy **Quitar repeticiones**, en vez de «Quitar retakes».
+2. **Interpretación de «la sombra prevalece»:** hoy, donde hay sombra no se dibuja contorno, y eso hace que el check **Contorno** no cambie nada en Chispa, Revista ni Titular. Falta confirmar si es así o si deben verse sombra y contorno a la vez.
 
 ---
 
