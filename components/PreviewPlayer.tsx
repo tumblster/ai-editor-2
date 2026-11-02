@@ -202,7 +202,6 @@ export default function PreviewPlayer({
           className="overlay-canvas"
           style={{ transform: `translate(-50%, -50%) scale(${scale})` }}
         >
-          {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
           {imageLayers
             .filter((l) => l.enabled !== false)
             .map((l) => {
@@ -212,6 +211,8 @@ export default function PreviewPlayer({
                 <ImageBlock key={l.id} layer={l} url={url} scale={scale} onPatch={onImagePatch} />
               )
             })}
+          {/* el texto va encima de las imágenes, igual que en el export */}
+          {stylePreset && <CaptionLive preset={stylePreset} cues={cues} playback={playback} />}
         </div>
       </div>
 

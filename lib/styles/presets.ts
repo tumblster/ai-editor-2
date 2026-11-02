@@ -2,12 +2,34 @@
 // Nombres públicos exactos; nunca nombres de creadores (ni aquí, ni en UI, ni en marketing).
 // Los mismos números alimentan el render de preview (CSS) y el quemado de export (ASS),
 // para que lo que se ve sea lo que sale en el MP4.
+// Regla de contraste: todo estilo lleva contorno oscuro además de la sombra, para
+// que el texto se lea sobre cualquier fotograma (claro, rayado o con amarillo).
 
 import type { StylePresetId } from '@/types/project'
 
 // Lienzo de diseño: el export es 1080x1920 (9:16) y el preview escala desde aquí.
 export const DESIGN_W = 1080
 export const DESIGN_H = 1920
+
+/**
+ * libass escala la fuente para que ascendente + descendente (métricas win del
+ * archivo de fuente) midan el Fontsize; CSS escala el em. Para que el MP4 tenga
+ * el mismo tamaño que la preview, el ASS usa size × este factor.
+ * Valores de (usWinAscent + usWinDescent) / unitsPerEm de cada fuente.
+ */
+const ASS_FONT_SCALE: Record<string, number> = {
+  Arial: 1.117,
+  Georgia: 1.136,
+  'Trebuchet MS': 1.161,
+}
+
+export function assFontScale(font: string): number {
+  return ASS_FONT_SCALE[font] ?? 1.15
+}
+
+export function assFontSize(font: string, cssPx: number): number {
+  return Math.round(cssPx * assFontScale(font))
+}
 
 export interface TextStyle {
   font: string
@@ -58,7 +80,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     name: 'Chispa',
     base: {
       font: 'Trebuchet MS', bold: true, italic: false, size: 88,
-      color: '#F5E9CE', outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0,
+      color: '#F5E9CE', outlineWidth: 3, outlineColor: '#000000', outlineAlpha: 0.6,
       shadowOffset: 5, shadowAlpha: 0.55,
     },
     cueWords: 3,
@@ -70,7 +92,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     name: 'Revista',
     base: {
       font: 'Georgia', bold: false, italic: false, size: 56,
-      color: '#FFFFFF', outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0,
+      color: '#FFFFFF', outlineWidth: 2, outlineColor: '#000000', outlineAlpha: 0.6,
       shadowOffset: 3, shadowAlpha: 0.5,
     },
     cueWords: 5,
@@ -85,14 +107,14 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     name: 'Titular',
     base: {
       font: 'Arial', bold: true, italic: false, size: 64,
-      color: '#FFFFFF', outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0,
+      color: '#FFFFFF', outlineWidth: 2.5, outlineColor: '#000000', outlineAlpha: 0.7,
       shadowOffset: 4, shadowAlpha: 0.55,
     },
     cueWords: 5,
     placement: { kind: 'center', yPercent: 49.5 },
     emphasis: {
       scope: 'keyword', uppercase: false, scale: 1.5, color: '#F7E01C', italic: true,
-      font: 'Georgia', outlineWidth: 1.5, outlineAlpha: 0.8,
+      font: 'Georgia', outlineWidth: 3, outlineAlpha: 0.85,
     },
   },
   claro: {
@@ -100,7 +122,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     name: 'Claro',
     base: {
       font: 'Arial', bold: true, italic: false, size: 60,
-      color: '#FFFFFF', outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0,
+      color: '#FFFFFF', outlineWidth: 2.5, outlineColor: '#000000', outlineAlpha: 0.7,
       shadowOffset: 3, shadowAlpha: 0.5,
     },
     cueWords: 5,

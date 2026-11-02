@@ -3,16 +3,35 @@
 
 import type { StylePresetId } from '@/types/project'
 import type { Cue } from './cues'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, type TextStyle } from './styles/presets'
+import { DESIGN_H, DESIGN_W, STYLE_PRESETS, assFontSize, type TextStyle } from './styles/presets'
 
+/**
+ * Tiempo ASS (centésimas). Se redondea hacia abajo: los bordes de los cues caen
+ * en la rejilla de fotogramas, y redondear hacia arriba dejaba el cue anterior
+ * visible un fotograma de más (y el siguiente entraba un fotograma tarde).
+ */
 function assTime(s: number): string {
-  const clamped = Math.max(0, s)
-  const h = Math.floor(clamped / 3600)
-  const m = Math.floor((clamped % 3600) / 60)
-  const sec = Math.floor(clamped % 60)
-  const cs = Math.round((clamped - Math.floor(clamped)) * 100)
-  const cc = cs === 100 ? 0 : cs
+  const totalCs = Math.floor(Math.max(0, s) * 100 + 1e-6)
+  const h = Math.floor(totalCs / 360000)
+  const m = Math.floor((totalCs % 360000) / 6000)
+  const sec = Math.floor((totalCs % 6000) / 100)
+  const cc = totalCs % 100
   return `${h}:${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}.${cc.toString().padStart(2, '0')}`
+}
+
+/** hex #RRGGBB → &HBBGGRR& (para tags \c, \3c, \4c) */
+function assBgr(hex: string): string {
+  const clean = hex.replace('#', '')
+  return `&H${clean.slice(4, 6)}${clean.slice(2, 4)}${clean.slice(0, 2)}&`.toUpperCase()
+}
+
+/** transparencia ASS (0 opaco..1 transparente) → &HAA& (para tags \1a, \3a, \4a) */
+function assAlpha(transparency: number): string {
+  const aa = Math.round(Math.min(Math.max(transparency, 0), 1) * 255)
+    .toString(16)
+    .padStart(2, '0')
+    .toUpperCase()
+  return `&H${aa}&`
 }
 
 /** hex #RRGGBB + alpha (0 opaco..1 transparente) → &HAABBGGRR */
@@ -39,10 +58,11 @@ function styleLine(
   return [
     `Style: ${name}`,
     t.font,
-    Math.round(t.size),
+    assFontSize(t.font, t.size),
     assColor(t.color),
     assColor('#FFFFFF', 1),
-    assColor(t.outlineWidth > 0 ? t.outlineColor : '#000000', t.outlineWidth > 0 ? t.outlineAlpha : 1),
+    // los presets guardan opacidad (0..1); ASS espera transparencia
+    assColor(t.outlineWidth > 0 ? t.outlineColor : '#000000', t.outlineWidth > 0 ? 1 - t.outlineAlpha : 1),
     assColor('#000000', 1 - t.shadowAlpha),
     t.bold ? -1 : 0,
     t.italic ? -1 : 0,
@@ -68,13 +88,16 @@ function cueText(cue: Cue, base: TextStyle, emph: NonNullable<typeof STYLE_PRESE
     if (!text) continue
     if (w.emph) {
       const tags: string[] = []
-      tags.push(`\\c${assColor(emph.color)}`)
-      if (emph.scale !== 1) tags.push(`\\fs${Math.round(base.size * emph.scale)}`)
+      tags.push(`\\c${assBgr(emph.color)}`)
+      if (emph.scale !== 1 || emph.font) {
+        tags.push(`\\fs${assFontSize(emph.font ?? base.font, base.size * emph.scale)}`)
+      }
       if (emph.font) tags.push(`\\fn${emph.font}`)
       if (emph.italic) tags.push('\\i1')
       if (emph.outlineWidth) {
         tags.push(`\\bord${emph.outlineWidth}`)
-        tags.push(`\\3c${assColor('#000000', emph.outlineAlpha ?? 0.8)}`)
+        tags.push(`\\3c${assBgr('#000000')}`)
+        tags.push(`\\3a${assAlpha(1 - (emph.outlineAlpha ?? 0.8))}`)
       }
       if (emph.uppercase) text = text.toUpperCase()
       parts.push(`{${tags.join('')}}${text}{\\r}`)
@@ -93,7 +116,8 @@ export function buildAss(styleId: StylePresetId, cues: Cue[], totalDuration: num
     'ScriptType: v4.00+',
     `PlayResX: ${DESIGN_W}`,
     `PlayResY: ${DESIGN_H}`,
-    'WrapStyle: 0',
+    // 1 = corte de línea al final (como CSS); 0 balanceaba las líneas y partía distinto
+    'WrapStyle: 1',
     'ScaledBorderAndShadow: yes',
     '',
     '[V4+ Styles]',
@@ -116,19 +140,20 @@ export function buildAss(styleId: StylePresetId, cues: Cue[], totalDuration: num
     const band = preset.placement
     const x0 = pctX(band.band[0])
     const x1 = pctX(band.band[1])
+    // relleno blanco con la misma opacidad que la preview (bandAlpha es opacidad)
     const bandStyle = [
       'Style: Band',
       'Arial',
       64,
-      assColor('#000000', 1),
+      assColor('#FFFFFF', 1 - band.bandAlpha),
       assColor('#FFFFFF', 1),
-      assColor('#FFFFFF', band.bandAlpha),
+      assColor('#000000', 1),
       assColor('#000000', 1),
       0, 0, 0, 0, 100, 100, 0, 0, 1, 0, 0, 7, 0, 0, 0, 1,
     ].join(',')
     styles.push(bandStyle)
     events.push(
-      `Dialogue: 1,${assTime(0)},${assTime(totalDuration)},Band,,0,0,0,,{\\an7\\pos(0,0)\\p1}m ${x0} 0 l ${x1} 0 l ${x1} ${DESIGN_H} l ${x0} ${DESIGN_H}{\\p0}`
+      `Dialogue: 0,${assTime(0)},${assTime(totalDuration)},Band,,0,0,0,,{\\an7\\pos(0,0)\\p1}m ${x0} 0 l ${x1} 0 l ${x1} ${DESIGN_H} l ${x0} ${DESIGN_H}{\\p0}`
     )
     for (const cue of cues) {
       const style = cue.side === 'left' ? 'RevL' : 'RevR'
@@ -136,7 +161,8 @@ export function buildAss(styleId: StylePresetId, cues: Cue[], totalDuration: num
         ? cueText(cue, preset.base, preset.emphasis)
         : cue.words.map((w) => escapeAss(w.text)).filter(Boolean).join(' ')
       if (!text) continue
-      events.push(`Dialogue: 0,${assTime(cue.start)},${assTime(cue.end)},${style},,0,0,0,,${text}`)
+      // texto (capa 1) encima de la banda (capa 0), como en la preview
+      events.push(`Dialogue: 1,${assTime(cue.start)},${assTime(cue.end)},${style},,0,0,0,,${text}`)
     }
   } else {
     styles.push(styleLine('Main', preset.base, 5, pctX(8), pctX(8), 0))

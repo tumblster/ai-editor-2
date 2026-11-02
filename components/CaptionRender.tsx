@@ -7,7 +7,7 @@ import type { CSSProperties } from 'react'
 
 import type { Cue } from '@/lib/cues'
 import { markEmph } from '@/lib/cues'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, type StylePreset, type TextStyle } from '@/lib/styles/presets'
+import { DESIGN_H, DESIGN_W, STYLE_PRESETS, assFontScale, type StylePreset, type TextStyle } from '@/lib/styles/presets'
 import type { StylePresetId } from '@/types/project'
 
 function rgba(hex: string, alpha: number): string {
@@ -21,14 +21,20 @@ function rgba(hex: string, alpha: number): string {
 export function textStyleCss(t: TextStyle): CSSProperties {
   return {
     fontFamily: `'${t.font}', 'Segoe UI', sans-serif`,
-    fontWeight: t.bold ? 800 : 400,
+    fontWeight: t.bold ? 700 : 400, // ASS solo tiene negrita 700
     fontStyle: t.italic ? 'italic' : 'normal',
     fontSize: t.size,
     color: t.color,
-    lineHeight: 1.18,
-    textShadow: t.shadowOffset > 0 ? `0 ${t.shadowOffset}px 0 rgba(0,0,0,${t.shadowAlpha})` : undefined,
+    lineHeight: assFontScale(t.font), // alto de línea de libass = ascendente + descendente
+    // ASS desplaza la sombra en x e y por igual
+    textShadow:
+      t.shadowOffset > 0
+        ? `${t.shadowOffset}px ${t.shadowOffset}px 0 rgba(0,0,0,${t.shadowAlpha})`
+        : undefined,
+    // El trazo CSS va centrado en el borde del glifo y paint-order deja visible solo
+    // la mitad exterior: el doble de ancho da el mismo contorno exterior que \bord de ASS.
     WebkitTextStroke:
-      t.outlineWidth > 0 ? `${t.outlineWidth}px ${rgba(t.outlineColor, t.outlineAlpha)}` : undefined,
+      t.outlineWidth > 0 ? `${t.outlineWidth * 2}px ${rgba(t.outlineColor, t.outlineAlpha)}` : undefined,
     paintOrder: 'stroke fill',
   }
 }
@@ -46,7 +52,7 @@ export function CaptionRender({ preset, cue }: { preset: StylePreset; cue: Cue |
     if (emphasis.font) css.fontFamily = `'${emphasis.font}', Georgia, serif`
     if (emphasis.uppercase) css.textTransform = 'uppercase'
     if (emphasis.outlineWidth) {
-      css.WebkitTextStroke = `${emphasis.outlineWidth}px rgba(0,0,0,${emphasis.outlineAlpha ?? 0.8})`
+      css.WebkitTextStroke = `${emphasis.outlineWidth * 2}px rgba(0,0,0,${emphasis.outlineAlpha ?? 0.8})`
       css.paintOrder = 'stroke fill'
     }
     return (
