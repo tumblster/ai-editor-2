@@ -1,6 +1,9 @@
 # dependencias
 node_modules/
 
+# compilados sueltos (pruebas y builds manuales) — npm test compila fuera del repo
+/tmpbuild/
+
 # next.js
 .next/
 out/
