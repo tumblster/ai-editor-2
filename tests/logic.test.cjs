@@ -17,7 +17,7 @@ if (!B || !R) {
 const { buildPhrases } = require(`${B}/phrases.js`)
 const { buildCutSegments, totalDuration } = require(`${B}/timeline.js`)
 const { buildCues, activeCue } = require(`${B}/cues.js`)
-const { applyAutocut, formatSummary } = require(`${B}/autocut.js`)
+const { applyAutocut } = require(`${B}/autocut.js`)
 const { failsContrast } = require(`${B}/contrast.js`)
 const { STYLE_PRESETS } = require(`${B}/styles/presets.js`)
 const { buildAss } = require(`${B}/assBuilder.js`)
@@ -74,10 +74,17 @@ test('frases: particionan el video sin huecos y no pasan de la duración real', 
   }
 })
 
-test('autorrecorte: resumen con el formato exacto del copy cerrado', () => {
-  const s = formatSummary(summary)
-  assert(/^Se quitaron \d+ segundos( — \d+ (silencios|muletillas|retakes)( · \d+ (silencios|muletillas|retakes))*)?$/.test(s), s)
-  assert(!/ 0 /.test(s), `no debe listar ceros: ${s}`)
+test('autorrecorte: marca lo quitado sin tocar el original y lo deja fuera de los segmentos', () => {
+  const removed = cut.filter((u) => u.removed)
+  assert(removed.length > 0, 'debía quitar algo')
+  for (const u of removed) assert(['silence', 'filler', 'retake'].includes(u.reason), `motivo ${u.reason}`)
+  assert(removed.some((u) => u.reason === 'silence') && removed.some((u) => u.reason === 'filler') && removed.some((u) => u.reason === 'retake'))
+  // las unidades quitadas siguen en la lista (para marcarlas en línea de tiempo y transcripción)
+  assert.strictEqual(cut.length, p1.length + p2.length)
+  assert(p1.every((u) => !u.removed), 'el original no se modifica')
+  const kept = new Set(segs.map((s) => s.unitId))
+  for (const u of removed) assert(!kept.has(u.id), `${u.id} quitado pero sigue en segmentos`)
+  assert(summary.seconds > 0)
 })
 
 // ---- Segmentos ----

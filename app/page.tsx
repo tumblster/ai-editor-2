@@ -13,7 +13,7 @@ import StylePicker from '@/components/StylePicker'
 import Timeline from '@/components/Timeline'
 import TranscriptionView from '@/components/TranscriptionView'
 import VideoUploader, { type UploaderBusy } from '@/components/VideoUploader'
-import { applyAutocut, formatSummary, type AutocutOptions } from '@/lib/autocut'
+import { applyAutocut, type AutocutOptions } from '@/lib/autocut'
 import { COPY } from '@/lib/copy'
 import { activeCue, buildCues } from '@/lib/cues'
 import { failsContrast, sampleZoneLuminance, zoneFor } from '@/lib/contrast'
@@ -39,7 +39,8 @@ export default function Page() {
   const [images, setImages] = useState<ImageAsset[]>([])
   const [busy, setBusy] = useState<UploaderBusy | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [summary, setSummary] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null)
+  const closeToast = useCallback(() => setToast(null), [])
 
   const [history, dispatchHistory] = useReducer(historyReducer, {
     past: [],
@@ -196,9 +197,9 @@ export default function Page() {
   }
 
   const runAutocut = (opts: AutocutOptions) => {
-    const { phrases: next, summary: s } = applyAutocut(phrases, opts)
+    const { phrases: next } = applyAutocut(phrases, opts)
     setEdit({ ...edit, phrases: next })
-    setSummary(formatSummary(s))
+    setToast({ id: Date.now(), text: AUTOCUT_DONE })
   }
 
   const patchImageLayer = (layerId: string, patch: Partial<Layer>) => {
@@ -293,7 +294,7 @@ export default function Page() {
           <div className="panel-head">
             <h2>Autorrecorte</h2>
           </div>
-          <AutocutPanel onApply={runAutocut} summary={summary} />
+          <AutocutPanel onApply={runAutocut} />
         </section>
 
         <section className="panel">
@@ -372,6 +373,8 @@ export default function Page() {
         </section>
       </div>
 
+      {toast && <Toast key={toast.id} text={toast.text} onClose={closeToast} />}
+
       {error && screen === 'editor' && (
         <div className="toast-error" role="alert">
           {error}
@@ -385,6 +388,21 @@ export default function Page() {
 }
 
 const IMAGE_DEFAULT_SECONDS = 3
+const AUTOCUT_DONE = 'Autorrecorte listo'
+const TOAST_MS = 5_000
+
+/** Aviso breve: se cierra solo a los 5 s o al tocarlo. */
+function Toast({ text, onClose }: { text: string; onClose: () => void }) {
+  useEffect(() => {
+    const id = setTimeout(onClose, TOAST_MS)
+    return () => clearTimeout(id)
+  }, [text, onClose])
+  return (
+    <button type="button" className="toast" role="status" onClick={onClose}>
+      {text}
+    </button>
+  )
+}
 
 /** Imagen de apoyo por defecto: 40% de ancho x 21% de alto, abajo-centro (debajo de la cara), 3 s. */
 function defaultImageLayer(imageId: string, start: number, index: number): Layer {

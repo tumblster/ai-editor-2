@@ -29,7 +29,7 @@ Corre `scripts/test-logic.cjs`, sin dependencias extra:
 Cubren:
 
 - frases de hasta 5 palabras y la partición del video,
-- el resumen del autorrecorte,
+- lo que marca el autorrecorte (sin tocar el original),
 - los segmentos alineados a fotograma y recortados a la duración real del video,
 - los cues,
 - la regla de contraste,
