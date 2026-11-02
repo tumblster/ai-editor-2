@@ -3,7 +3,7 @@
 
 import type { Canvas } from './canvas'
 import type { Cue } from './cues'
-import { assFontScale, type StylePreset } from './styles/presets'
+import { DIFFUSE_SHADOW, assFontScale, type StylePreset } from './styles/presets'
 import type { Layer } from '@/types/project'
 
 /** Desplazamiento del bloque de texto, en % del lienzo, respecto a la posición del estilo. */
@@ -23,9 +23,9 @@ export function clampOffset(o: Partial<TextOffset> | null | undefined): TextOffs
 
 /**
  * Sombra que se aplica al texto cuando una imagen de apoyo queda debajo:
- * la imagen va detrás y el texto encima con sombra.
+ * la imagen va detrás y el texto encima con sombra (la misma sombra difusa).
  */
-export const COLLISION_SHADOW = { offset: 3, alpha: 0.6 }
+export const COLLISION_SHADOW = { offset: DIFFUSE_SHADOW.distance, alpha: DIFFUSE_SHADOW.alpha }
 
 /**
  * Rectángulo aproximado del texto en % del lienzo [x0, y0, x1, y1]. Vertical:

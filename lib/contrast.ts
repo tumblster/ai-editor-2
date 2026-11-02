@@ -75,7 +75,7 @@ export function failsContrast(preset: StylePreset, bgLum: number): boolean {
   const readable = (color: string, edge: { outline: number; outlineAlpha: number; outlineColor: string; shadow: number; shadowAlpha: number }) => {
     const fill = hexLum(color)
     if (ratio(fill, bgLum) >= 3) return true
-    // borde oscuro: contorno de al menos 2 px al 60%, o sombra de al menos 2 px al 45%
+    // borde oscuro: contorno de al menos 2 px al 60%, o la sombra difusa (al menos al 45%)
     const hasOutline = edge.outline >= 2 && edge.outlineAlpha >= 0.6
     const hasShadow = edge.shadow >= 2 && edge.shadowAlpha >= 0.45
     const edgeLum = hasOutline ? hexLum(edge.outlineColor) : 0

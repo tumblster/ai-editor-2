@@ -6,7 +6,20 @@
 import type { CSSProperties } from 'react'
 
 import type { Cue } from '@/lib/cues'
-import { assFontScale, outlineLayers, type StylePreset, type TextStyle } from '@/lib/styles/presets'
+import {
+  assFontScale,
+  outlineLayers,
+  shadowBlurCss,
+  shadowXY,
+  type StylePreset,
+  type TextStyle,
+} from '@/lib/styles/presets'
+
+/** Sombra difusa en CSS: -45° (abajo a la derecha), desenfoque según el tamaño de la letra. */
+function diffuseShadowCss(size: number, distance: number, alpha: number): string {
+  const { x, y } = shadowXY(distance)
+  return `${x}px ${y}px ${shadowBlurCss(size)}px rgba(0,0,0,${alpha})`
+}
 import { COLLISION_SHADOW, NO_OFFSET, type TextOffset } from '@/lib/textLayout'
 
 function rgba(hex: string, alpha: number): string {
@@ -26,10 +39,8 @@ export function textStyleCss(t: TextStyle): CSSProperties {
     color: t.color,
     lineHeight: assFontScale(t.font), // alto de línea de libass = ascendente + descendente
     // ASS desplaza la sombra en x e y por igual
-    textShadow:
-      t.shadowOffset > 0
-        ? `${t.shadowOffset}px ${t.shadowOffset}px 0 rgba(0,0,0,${t.shadowAlpha})`
-        : undefined,
+    // sombra difusa (DIFFUSE_SHADOW): mismo desplazamiento, opacidad y desenfoque que el ASS
+    textShadow: t.shadowOffset > 0 ? diffuseShadowCss(t.size, t.shadowOffset, t.shadowAlpha) : undefined,
     // El trazo CSS va centrado en el borde del glifo y paint-order deja visible solo
     // la mitad exterior: el doble de ancho da el mismo contorno exterior que \bord de ASS.
     WebkitTextStroke:
@@ -80,7 +91,7 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
       if (emphasis.uppercase) css.textTransform = 'uppercase'
       // las palabras de énfasis llevan sombra (en la capa de arriba)
       if (emphasis.shadowOffset > 0) {
-        css.textShadow = `${emphasis.shadowOffset}px ${emphasis.shadowOffset}px 0 rgba(0,0,0,${emphasis.shadowAlpha})`
+        css.textShadow = diffuseShadowCss(base.size * emphasis.scale, emphasis.shadowOffset, emphasis.shadowAlpha)
         if (base.outlineWidth > 0) css.WebkitTextStroke = '0px transparent'
       }
       return (

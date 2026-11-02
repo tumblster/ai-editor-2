@@ -30,6 +30,36 @@ export function assFontSize(font: string, cssPx: number): number {
   return Math.round(cssPx * assFontScale(font))
 }
 
+/**
+ * Sombra difusa (Playbook regla 1, valores de partida del manual VM: negro,
+ * Opacity 55%, Blurriness 17%, Distance 5, Angle -45°), traducida al lienzo:
+ * - opacidad 55%;
+ * - desenfoque: 17% del tamaño de la letra como radio CSS. libass difumina
+ *   más con el mismo número (medido: \blur 4 ≈ 6 px CSS, \blur 8 ≈ 12 px), así
+ *   que el ASS usa el radio CSS / 1.5;
+ * - distancia: 3 px a -45° (abajo a la derecha), 2 px por eje. El manual da
+ *   5 en unidades de su editor; aquí se deja casi sin desplazamiento porque la
+ *   regla 1 pide que la sombra no se note corrida hacia un lado.
+ */
+export const DIFFUSE_SHADOW = { alpha: 0.55, blur: 0.17, distance: 3, angleDeg: -45 } as const
+const ASS_BLUR_FACTOR = 1.5
+
+/** Desplazamiento por eje (x a la derecha, y hacia abajo) de la sombra a -45°. */
+export function shadowXY(distance: number): { x: number; y: number } {
+  const d = Math.round(Math.max(0, distance) * Math.SQRT1_2)
+  return { x: d, y: d }
+}
+
+/** Radio de desenfoque CSS (text-shadow) para una letra de `size` px. */
+export function shadowBlurCss(size: number): number {
+  return Math.round(size * DIFFUSE_SHADOW.blur)
+}
+
+/** Valor de \blur de libass equivalente al radio CSS. */
+export function shadowBlurAss(size: number): number {
+  return Math.round((shadowBlurCss(size) / ASS_BLUR_FACTOR) * 10) / 10
+}
+
 export interface TextStyle {
   font: string
   bold: boolean
@@ -39,7 +69,7 @@ export interface TextStyle {
   outlineWidth: number // px; 0 = sin contorno
   outlineColor: string // hex
   outlineAlpha: number
-  shadowOffset: number // px, offset duro como ASS (sin blur)
+  shadowOffset: number // distancia de la sombra difusa en px (0 = sin sombra); ver DIFFUSE_SHADOW
   shadowAlpha: number // 0-1
 }
 
@@ -84,7 +114,7 @@ export interface StylePreset {
 
 const NO_OUTLINE = { outlineWidth: 0, outlineColor: '#000000', outlineAlpha: 0 }
 
-// Sombra y contorno (decisión del usuario):
+// Sombra y contorno (decisión del usuario): toda sombra es la difusa (DIFFUSE_SHADOW).
 // - Sombra activa por defecto en títulos y textos grandes (Chispa, Revista,
 //   Titular) y en las palabras de énfasis; apagada en subtitulado simple
 //   (Claro, Foco).
@@ -99,14 +129,14 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     base: {
       font: 'Trebuchet MS', bold: true, italic: false, size: 88,
       color: '#F5E9CE', ...NO_OUTLINE,
-      shadowOffset: 5, shadowAlpha: 0.55,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
     outline: { width: 2, color: '#000000', alpha: 0.75 },
     cueWords: 3,
     placement: { kind: 'center', yPercent: 31.5 },
     emphasis: {
       scope: 'keyword', uppercase: true, scale: 1.3, color: '#FFF7E0', italic: false,
-      shadowOffset: 5, shadowAlpha: 0.55,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
   },
   revista: {
@@ -115,7 +145,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     base: {
       font: 'Georgia', bold: false, italic: false, size: 56,
       color: '#FFFFFF', ...NO_OUTLINE,
-      shadowOffset: 3, shadowAlpha: 0.5,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
     outline: { width: 2, color: '#000000', alpha: 0.7 },
     cueWords: 5,
@@ -131,14 +161,14 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     base: {
       font: 'Arial', bold: true, italic: false, size: 64,
       color: '#FFFFFF', ...NO_OUTLINE,
-      shadowOffset: 4, shadowAlpha: 0.55,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
     outline: { width: 2, color: '#000000', alpha: 0.75 },
     cueWords: 5,
     placement: { kind: 'center', yPercent: 49.5 },
     emphasis: {
       scope: 'keyword', uppercase: false, scale: 1.5, color: '#F7E01C', italic: true,
-      font: 'Georgia', shadowOffset: 4, shadowAlpha: 0.65,
+      font: 'Georgia', shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
   },
   claro: {
@@ -154,7 +184,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     placement: { kind: 'center', yPercent: 59.5 },
     emphasis: {
       scope: 'keyword', uppercase: false, scale: 1.0, color: '#F9EEAF', italic: false,
-      shadowOffset: 3, shadowAlpha: 0.6,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
   },
   foco: {
@@ -170,7 +200,7 @@ export const STYLE_PRESETS: Record<StylePresetId, StylePreset> = {
     placement: { kind: 'center', yPercent: 70 },
     emphasis: {
       scope: 'numbers', uppercase: false, scale: 1.15, color: '#FFD84D', italic: false,
-      shadowOffset: 3, shadowAlpha: 0.6,
+      shadowOffset: DIFFUSE_SHADOW.distance, shadowAlpha: DIFFUSE_SHADOW.alpha,
     },
   },
 }
