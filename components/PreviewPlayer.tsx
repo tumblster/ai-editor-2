@@ -239,6 +239,20 @@ export default function PreviewPlayer({
   }, [canvas.w, canvas.h])
   const scale = size.w ? size.w / canvas.w : 0.2
 
+  // Imágenes visibles en el tiempo actual: mismo criterio que el export
+  // (overlay enable='between(t, inicio, fin)', extremos incluidos).
+  const [visibleIds, setVisibleIds] = useState('')
+  useEffect(() => {
+    return playback.subscribe((t) => {
+      const ids = imageLayers
+        .filter((l) => l.enabled !== false && t >= l.start && t <= l.end)
+        .map((l) => l.id)
+        .join('|')
+      setVisibleIds((prev) => (prev === ids ? prev : ids))
+    })
+  }, [playback, imageLayers])
+  const visible = new Set(visibleIds.split('|'))
+
   useEffect(() => {
     return playback.subscribe((t) => {
       if (timeRef.current) {
@@ -280,7 +294,7 @@ export default function PreviewPlayer({
           }}
         >
           {imageLayers
-            .filter((l) => l.enabled !== false)
+            .filter((l) => l.enabled !== false && visible.has(l.id))
             .map((l) => {
               const url = l.src ? urlBySrc.get(l.src) : undefined
               if (!url) return null
