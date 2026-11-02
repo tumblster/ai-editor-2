@@ -18,7 +18,7 @@ const PAUSE_BREAK = 0.6 // s de pausa que cierra una frase con >= 3 palabras
 export function normalizeWord(w: string): string {
   return w
     .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s%€$.,!?¿¡…]/gu, '')
+    .replace(/[^\p{L}\p{N}\s%€$]/gu, '')
     .trim()
 }
 

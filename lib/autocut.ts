@@ -68,53 +68,74 @@ export function applyAutocut(
 
 /**
  * Retakes: frases repetidas — se queda solo el último intento completo.
- * Conservador: texto normalizado idéntico (1-3 frases seguidas), dentro de la
- * ventana de tiempo, y el intento anterior termina en pausa o muletilla.
+ * Se comparan "runs de habla" (frases contiguas sin gap ni muletilla): si un
+ * run posterior empieza con el texto de uno anterior (y el intento anterior
+ * terminó abandonado — seguido de silencio o muletilla), el anterior es un
+ * retake y se marca. Conservador: requiere pausa/muletilla entre intentos.
  */
 function detectRetakes(phrases: PhraseUnit[]): void {
-  const speakable = phrases.filter(
-    (p) => p.kind === 'phrase' && !p.isFiller && p.words.filter((w) => normalizeWord(w.word)).length >= RETAKE_MIN_WORDS
-  )
-
   const normText = (p: PhraseUnit) =>
     p.words.map((w) => normalizeWord(w.word)).filter(Boolean).join(' ')
 
+  // runs de habla contiguos
+  const runs: { units: PhraseUnit[]; text: string; end: number; abandonedAfter: boolean }[] = []
+  let cur: PhraseUnit[] = []
+  let prev: PhraseUnit | null = null
+
+  const flushRun = () => {
+    if (!cur.length) return
+    const text = cur.map(normText).filter(Boolean).join(' ')
+    const last = cur[cur.length - 1]
+    const next = phrases.find(
+      (p) => p.videoId === last.videoId && p.start >= last.end - 0.01
+    )
+    const abandonedAfter =
+      !next || next.kind === 'gap' || next.isFiller === true
+    runs.push({ units: cur, text, end: last.end, abandonedAfter })
+    cur = []
+  }
+
+  for (const p of phrases) {
+    const isSpeakable = p.kind === 'phrase' && !p.isFiller
+    if (!isSpeakable) {
+      flushRun()
+      prev = p
+      continue
+    }
+    const contiguous =
+      prev !== null && prev.videoId === p.videoId && p.start - prev.end < 0.05
+    if (!contiguous) flushRun()
+    cur.push(p)
+    prev = p
+  }
+  flushRun()
+
   const used = new Set<string>()
-  for (let a = 0; a < speakable.length; a++) {
-    if (used.has(speakable[a].id)) continue
-    for (let n = 3; n >= 1; n--) {
-      const runA = speakable.slice(a, a + n)
-      if (runA.length < n) continue
-      const textA = runA.map(normText).join(' ')
-      if (textA.split(' ').length < RETAKE_MIN_WORDS) continue
-      const lastA = runA[runA.length - 1]
-
-      // el intento fallido termina en pausa (gap), muletilla o fin del video
-      const nextUnit = phrases
-        .filter((p) => p.videoId === lastA.videoId && p.start >= lastA.end - 0.01)
-        .sort((x, y) => x.start - y.start)[0]
-      const endsAbandoned = !nextUnit || nextUnit.kind === 'gap' || nextUnit.isFiller === true
-      if (!endsAbandoned) continue
-
-      for (let b = a + n; b < speakable.length; b++) {
-        const runB = speakable.slice(b, b + n)
-        if (runB.length < n) break
-        if (runB[0].videoId !== runA[0].videoId) break
-        if (runB[0].start - lastA.end > RETAKE_WINDOW) break
-        if (runB.some((p) => used.has(p.id))) continue
-        const textB = runB.map(normText).join(' ')
-        if (textA !== textB || !textA) continue
-        // se queda el último intento: se marca el anterior
-        for (const p of runA) {
-          const target = phrases.find((x) => x.id === p.id)
-          if (target) {
-            target.removed = true
-            target.reason = 'retake'
-          }
-          used.add(p.id)
+  for (let a = 0; a < runs.length - 1; a++) {
+    const A = runs[a]
+    if (!A.abandonedAfter) continue
+    const wordsA = A.text.split(' ').filter(Boolean)
+    if (wordsA.length < RETAKE_MIN_WORDS) continue
+    for (let b = a + 1; b < runs.length; b++) {
+      const B = runs[b]
+      if (B.units[0].videoId !== A.units[0].videoId) break
+      if (B.units[0].start - A.end > RETAKE_WINDOW) break
+      if (B.units.some((p) => used.has(p.id))) continue
+      const wordsB = B.text.split(' ').filter(Boolean)
+      // el intento nuevo repite el texto anterior y lo continúa (o lo repite igual)
+      const repeats =
+        wordsB.length >= wordsA.length &&
+        wordsA.every((w, i) => wordsB[i] === w)
+      if (!repeats) continue
+      for (const p of A.units) {
+        const target = phrases.find((x) => x.id === p.id)
+        if (target) {
+          target.removed = true
+          target.reason = 'retake'
         }
-        break
+        used.add(p.id)
       }
+      break
     }
   }
 }

@@ -1,0 +1,1 @@
+drawtext=fontfile=C\:/Windows/Fonts/arialbd.ttf:text=v2 %{pts\:hms}:fontsize=72:fontcolor=white:x=(w-tw)/2:y=200
