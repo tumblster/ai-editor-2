@@ -6,9 +6,7 @@
 import type { CSSProperties } from 'react'
 
 import type { Cue } from '@/lib/cues'
-import { markEmph } from '@/lib/cues'
-import { DESIGN_H, DESIGN_W, STYLE_PRESETS, assFontScale, type StylePreset, type TextStyle } from '@/lib/styles/presets'
-import type { StylePresetId } from '@/types/project'
+import { assFontScale, type StylePreset, type TextStyle } from '@/lib/styles/presets'
 import { COLLISION_SHADOW, NO_OFFSET, type TextOffset } from '@/lib/textLayout'
 
 function rgba(hex: string, alpha: number): string {
@@ -143,40 +141,5 @@ export function CaptionRender({ preset, cue, offset = NO_OFFSET, collision = fal
   )
 }
 
-/** Tarjeta en miniatura con el mismo clip de ejemplo para los cinco estilos. */
-export function StyleThumb({ preset, width }: { preset: StylePreset; width: number }) {
-  const scale = width / DESIGN_W
-  return (
-    <div className="style-thumb" style={{ width, height: DESIGN_H * scale }}>
-      <div
-        style={{
-          width: DESIGN_W,
-          height: DESIGN_H,
-          transform: `scale(${scale})`,
-          transformOrigin: '0 0',
-          position: 'relative',
-        }}
-      >
-        <ExampleCue presetId={preset.id} />
-      </div>
-    </div>
-  )
-}
-
-// El mismo clip de ejemplo para todas las tarjetas
+// Texto de ejemplo para las tarjetas de estilo si todavía no hay frases
 export const EXAMPLE_WORDS = ['solo', '3', 'pasos', 'y', 'listo']
-
-function ExampleCue({ presetId }: { presetId: StylePresetId }) {
-  const preset = STYLE_PRESETS[presetId]
-  const emph = preset.emphasis
-    ? markEmph(preset.emphasis.scope, EXAMPLE_WORDS)
-    : EXAMPLE_WORDS.map(() => false)
-  const cue: Cue = {
-    id: 'example',
-    start: 0,
-    end: 1,
-    words: EXAMPLE_WORDS.map((text, i) => ({ text, emph: emph[i] })),
-    side: 'left',
-  }
-  return <CaptionRender preset={preset} cue={cue} />
-}

@@ -332,6 +332,11 @@ export default function Page() {
             styleId={edit.styleId}
             onSelect={(id: StylePresetId | null) => setEdit({ ...edit, styleId: id })}
             outline={outlineOn}
+            outlines={edit.outlines ?? {}}
+            canvas={canvas}
+            videos={videos}
+            phrases={phrases}
+            segments={segments}
             onOutline={(on) =>
               edit.styleId && setEdit({ ...edit, outlines: { ...edit.outlines, [edit.styleId]: on } })
             }

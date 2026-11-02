@@ -514,45 +514,43 @@ button:disabled {
   text-decoration: line-through;
 }
 
-/* ---- estilo ---- */
+/* ---- estilo: pasos arriba, tarjetas, Back/Next abajo (la preview es el reproductor) ---- */
 .style-picker {
-  /* vista previa a la izquierda, tarjetas a la derecha, Back/Next debajo */
-  display: grid;
-  grid-template-columns: 120px 1fr;
-  grid-template-areas:
-    'preview cards'
-    'nav nav';
+  display: flex;
+  flex-direction: column;
   gap: var(--s3);
 }
-.style-preview {
-  grid-area: preview;
-  align-self: start;
-  border-radius: var(--radius-sm);
-  overflow: hidden;
+.style-steps {
+  display: flex;
+  gap: var(--s1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.style-stage {
-  width: 120px;
-  aspect-ratio: 9 / 16;
-  position: relative;
-  overflow: hidden;
-  background: #2b2622;
+.style-steps li {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.style-steps li.is-current {
+  background: var(--accent);
 }
 .style-cards {
-  grid-area: cards;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: var(--s2);
-  align-content: start;
 }
 .style-card {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--s1);
-  padding: var(--s1);
+  gap: var(--s2);
+  padding: var(--s1) var(--s1) var(--s2);
   border-radius: var(--radius-sm);
   border: 2px solid transparent;
   background: var(--bg-elev2);
+  text-align: left;
+  min-width: 0;
   transition: transform 160ms var(--ease-out);
 }
 .style-card:active {
@@ -562,20 +560,31 @@ button:disabled {
   border-color: var(--accent);
 }
 .style-card-name {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
+  padding: 0 var(--s1);
 }
 .style-thumb {
+  position: relative;
+  width: 100%;
   border-radius: var(--s1);
   overflow: hidden;
-  background: #2b2622;
-  position: relative;
+  background: #000;
+}
+.style-thumb-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.style-options {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
 }
 .style-nav {
-  grid-area: nav;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
   gap: var(--s2);
 }
 .style-nav .btn {
